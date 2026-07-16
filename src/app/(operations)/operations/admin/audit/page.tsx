@@ -1,0 +1,9 @@
+import Link from "next/link";
+import { getUserAdministrationAudit } from "@/application/admin/user-management";
+
+export const dynamic = "force-dynamic";
+
+export default async function UserAuditPage() {
+  const events = await getUserAdministrationAudit();
+  return <section><Link className="text-sm text-emerald-300 hover:text-emerald-200" href="/operations/admin/users">← Users & access</Link><p className="mt-6 text-sm font-semibold uppercase tracking-[0.18em] text-emerald-400">Administration</p><h1 className="mt-2 text-4xl font-semibold">Access audit</h1><p className="mt-3 text-slate-400">The 100 most recent immutable user administration events.</p><div className="mt-8 overflow-x-auto rounded-2xl border border-slate-800"><table className="w-full min-w-[900px] text-left text-sm"><caption className="sr-only">Recent user administration audit events</caption><thead className="bg-slate-900 text-slate-400"><tr><th className="px-4 py-3" scope="col">When</th><th className="px-4 py-3" scope="col">Action</th><th className="px-4 py-3" scope="col">Target</th><th className="px-4 py-3" scope="col">Actor</th><th className="px-4 py-3" scope="col">Reason</th></tr></thead><tbody>{events.map((event) => <tr className="border-t border-slate-800" key={event.id}><td className="px-4 py-3 text-slate-400">{new Date(event.occurredAt).toLocaleString("en-US")}</td><td className="px-4 py-3 font-mono text-emerald-300">{event.action}</td><td className="px-4 py-3 font-mono text-xs text-slate-400">{event.entityId ?? "—"}</td><td className="px-4 py-3"><span>{event.actor}</span>{event.actorEmail ? <span className="block text-slate-500">{event.actorEmail}</span> : null}</td><td className="px-4 py-3 text-slate-300">{event.reason ?? "—"}</td></tr>)}{events.length === 0 ? <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={5}>No user administration events yet.</td></tr> : null}</tbody></table></div></section>;
+}

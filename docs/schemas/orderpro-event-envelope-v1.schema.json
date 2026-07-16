@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:orderpro:schema:event-envelope:v1",
+  "title": "OrderPRO event envelope v1",
+  "description": "Transport-neutral event envelope. Event names other than walking_zones.published are reserved until their payload-specific schemas are approved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "schemaVersion",
+    "eventType",
+    "occurredAt",
+    "correlationId",
+    "entityId",
+    "entityVersion",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "schemaVersion": {
+      "const": "orderpro.event.v1"
+    },
+    "eventType": {
+      "enum": [
+        "orderpro.walking_zones.published",
+        "orderpro.inventory.changed",
+        "orderpro.reservation.created",
+        "orderpro.reservation.confirmed",
+        "orderpro.reservation.released",
+        "orderpro.reservation.expired",
+        "orderpro.fulfillment.accepted",
+        "orderpro.picking.started",
+        "orderpro.order.packed",
+        "orderpro.shipping.label_created",
+        "orderpro.order.shipped",
+        "orderpro.order.out_for_delivery",
+        "orderpro.order.delivered",
+        "orderpro.fulfillment.exception",
+        "orderpro.order.cancelled"
+      ]
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "correlationId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "entityId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "entityVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}

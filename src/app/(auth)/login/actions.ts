@@ -1,19 +1,35 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
+import {
+  authenticationFailureMessage,
+  classifyAuthenticationError,
+  parseLoginCredentials,
+  type AuthenticationFailure,
+} from "@/application/auth/password-login";
 import { createSupabaseServerClient } from "@/infrastructure/supabase/server";
 
-export type LoginState = { error?: string };
-const schema = z.object({ email: z.string().email(), password: z.string().min(8).max(128) });
+export type LoginState = { error?: string; code?: AuthenticationFailure | "INVALID_INPUT" };
 
 export async function login(_state: LoginState, formData: FormData): Promise<LoginState> {
-  const input = schema.safeParse({ email: formData.get("email"), password: formData.get("password") });
-  if (!input.success) return { error: "Enter a valid email and password." };
+  const input = parseLoginCredentials({ email: formData.get("email"), password: formData.get("password") });
+  if (!input.success) return { code: "INVALID_INPUT", error: "Enter a valid email and password." };
+
   const supabase = await createSupabaseServerClient();
-  if (!supabase) return { error: "Authentication is not configured yet." };
-  const { error } = await supabase.auth.signInWithPassword(input.data);
-  if (error) return { error: "Invalid credentials or access is not enabled." };
+  if (!supabase) {
+    return { code: "CONFIGURATION_ERROR", error: authenticationFailureMessage("CONFIGURATION_ERROR") };
+  }
+
+  try {
+    const { error } = await supabase.auth.signInWithPassword(input.credentials);
+    if (error) {
+      const failure = classifyAuthenticationError(error);
+      return { code: failure, error: authenticationFailureMessage(failure) };
+    }
+  } catch {
+    return { code: "SERVICE_UNAVAILABLE", error: authenticationFailureMessage("SERVICE_UNAVAILABLE") };
+  }
+
   redirect("/operations");
 }
 

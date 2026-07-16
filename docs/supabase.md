@@ -13,6 +13,24 @@ The configured project reference is `vzuibvzwodrhryphkqjz` in `us-east-2`. Copy 
 
 The browser never receives database credentials. OrderPRO uses Prisma only from server modules. The initial migration enables RLS on every operational table without public policies and revokes table/sequence access from Supabase `anon` and `authenticated` roles when present. Do not add browser Data API policies without a separate threat-model review.
 
+Supabase Auth uses `NEXT_PUBLIC_SUPABASE_URL` and the publishable key from the same project. The key is public by design, but it must never be replaced with a secret or `service_role` key. `/api/health/ready` verifies both PostgreSQL and Auth without returning provider messages or credentials.
+
+## Auth administration and invitations
+
+Administrative invitations require `SUPABASE_SECRET_KEY` (`sb_secret_...`) and `ORDERPRO_APP_URL`. The secret key is server-only, bypasses Data API RLS and must never use a `NEXT_PUBLIC_` prefix. The legacy `SUPABASE_SERVICE_ROLE_KEY` is accepted temporarily for migration, but new environments should use the current secret key.
+
+Add the application routes to **Authentication → URL Configuration → Redirect URLs** in Supabase. Local development requires `http://localhost:3001/**`; production should use the exact HTTPS application origin.
+
+Customize the Supabase **Invite user** email template so link scanners cannot consume the one-time token on a GET request. Point the template at the OrderPRO confirmation page and pass the token hash:
+
+```html
+<a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite">Accept the OrderPRO invitation</a>
+```
+
+OrderPRO renders that link without verifying it, then consumes the token only after the user presses **Accept invitation**. The resulting session can set a password at `/set-password`; the session is signed out afterward so the user performs a normal password login.
+
+Roles and location grants are never read from Supabase `user_metadata`. They remain in PostgreSQL because user metadata can be edited by the authenticated user and is not an authorization boundary.
+
 ## Migration workflow
 
 1. Create an isolated Supabase project for development/staging.

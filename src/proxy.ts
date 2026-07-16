@@ -1,7 +1,12 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { refreshSupabaseSession } from "@/infrastructure/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
+  // Versioned machine APIs authenticate independently. Human Supabase cookies
+  // are deliberately not refreshed or accepted as machine credentials.
+  if (request.nextUrl.pathname.startsWith("/v1/")) {
+    return NextResponse.next({ request });
+  }
   return refreshSupabaseSession(request);
 }
 

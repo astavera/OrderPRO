@@ -9,9 +9,18 @@ export const manifestLineSchema = z.object({
 
 export type ManifestLine = z.infer<typeof manifestLineSchema>;
 
+function canonicalQuantity(value: string) {
+  const [integer, fraction = ""] = value.split(".");
+  const trimmedFraction = fraction.replace(/0+$/, "");
+  return trimmedFraction ? `${integer}.${trimmedFraction}` : integer;
+}
+
 export function canonicalManifest(lines: ManifestLine[]) {
   return [...lines]
-    .map((line) => manifestLineSchema.parse(line))
+    .map((line) => {
+      const parsed = manifestLineSchema.parse(line);
+      return { ...parsed, quantity: canonicalQuantity(parsed.quantity) };
+    })
     .sort((left, right) => left.inventoryLotId.localeCompare(right.inventoryLotId));
 }
 

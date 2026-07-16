@@ -3,7 +3,8 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requirePrincipal } from "@/application/auth/current-principal";
+import { requirePermission } from "@/application/auth/current-principal";
+import { activeLocationIds } from "@/application/auth/principal-access";
 import { createBox } from "@/application/boxes/create-box";
 
 export type CreateBoxState = { success?: string; error?: string };
@@ -12,9 +13,9 @@ const schema = z.object({ commandId: z.string().uuid(), ownerLocationId: z.strin
 export async function createBoxAction(_state: CreateBoxState, formData: FormData): Promise<CreateBoxState> {
   const input = schema.safeParse({ commandId: formData.get("commandId"), ownerLocationId: formData.get("ownerLocationId"), currentLocationId: formData.get("currentLocationId") });
   if (!input.success) return { error: "Invalid box request." };
-  const { account } = await requirePrincipal();
+  const { account } = await requirePermission("boxes.mutate");
   try {
-    const result = await createBox({ ...input.data, actorId: account.id, roles: account.roles.map(({ role }) => role), allowedLocationIds: account.locations.map(({ locationId }) => locationId), correlationId: randomUUID() });
+    const result = await createBox({ ...input.data, actorId: account.id, roles: account.roles.map(({ role }) => role), allowedLocationIds: activeLocationIds(account), correlationId: randomUUID() });
     revalidatePath("/operations/boxes");
     return { success: `Box ${result.code} created.` };
   } catch (error) {

@@ -1,0 +1,320 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:orderpro:schema:walking-zones-snapshot:v1",
+  "title": "OrderPRO walking zones published snapshot v1",
+  "description": "Immutable published walking-delivery configuration with durable zone- and policy-version references. Schema validity does not replace OrderPRO topology, policy, digest or effective-date validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "publicationId",
+    "versionNumber",
+    "effectiveFrom",
+    "effectiveTo",
+    "digest",
+    "zones"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "orderpro.walking-zones.v1"
+    },
+    "publicationId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "versionNumber": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "effectiveFrom": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "effectiveTo": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "digest": {
+      "$ref": "#/$defs/sha256Digest"
+    },
+    "zones": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/walkingZone"
+      }
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "sha256Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "postalCode": {
+      "type": "string",
+      "pattern": "^[0-9]{5}$"
+    },
+    "dayOfWeek": {
+      "enum": [
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
+        "SUNDAY"
+      ]
+    },
+    "policyMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/stableId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/stableId"
+      }
+    },
+    "position": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "linearRing": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "$ref": "#/$defs/position"
+      }
+    },
+    "polygonCoordinates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/linearRing"
+      }
+    },
+    "polygon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "coordinates"
+      ],
+      "properties": {
+        "type": {
+          "const": "Polygon"
+        },
+        "coordinates": {
+          "$ref": "#/$defs/polygonCoordinates"
+        }
+      }
+    },
+    "multiPolygon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "coordinates"
+      ],
+      "properties": {
+        "type": {
+          "const": "MultiPolygon"
+        },
+        "coordinates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/polygonCoordinates"
+          }
+        }
+      }
+    },
+    "geometry": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/polygon"
+        },
+        {
+          "$ref": "#/$defs/multiPolygon"
+        }
+      ]
+    },
+    "walkingZone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "zoneVersionId",
+        "postalCodes",
+        "priority",
+        "serviceMode",
+        "assignmentStrategy",
+        "locationIds",
+        "geometry",
+        "activeDays",
+        "feePolicyVersionIdByLocation",
+        "slotPolicyVersionIdByLocation"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "zoneVersionId": {
+          "$ref": "#/$defs/stableId",
+          "description": "Durable identifier of the exact immutable OrderPRO walking-zone version represented by this entry."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "postalCodes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/postalCode"
+          }
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "serviceMode": {
+          "const": "WALKING"
+        },
+        "assignmentStrategy": {
+          "enum": [
+            "FIXED",
+            "NEAREST_WALKING_ROUTE"
+          ]
+        },
+        "locationIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/stableId"
+          }
+        },
+        "geometry": {
+          "$ref": "#/$defs/geometry"
+        },
+        "activeDays": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/dayOfWeek"
+          }
+        },
+        "maxDistanceMiles": {
+          "oneOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxRouteMinutes": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minimumOrderCents": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "feePolicyVersionIdByLocation": {
+          "$ref": "#/$defs/policyMap",
+          "description": "Maps each stable location ID to the durable immutable fee-policy version ID used by this publication."
+        },
+        "slotPolicyVersionIdByLocation": {
+          "$ref": "#/$defs/policyMap",
+          "description": "Maps each stable location ID to the durable immutable slot-policy version ID used by this publication."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "assignmentStrategy": {
+                "const": "FIXED"
+              }
+            },
+            "required": [
+              "assignmentStrategy"
+            ]
+          },
+          "then": {
+            "properties": {
+              "locationIds": {
+                "minItems": 1,
+                "maxItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "assignmentStrategy": {
+                "const": "NEAREST_WALKING_ROUTE"
+              }
+            },
+            "required": [
+              "assignmentStrategy"
+            ]
+          },
+          "then": {
+            "properties": {
+              "locationIds": {
+                "minItems": 2
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

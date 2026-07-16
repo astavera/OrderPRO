@@ -4,7 +4,7 @@ Independent OMS/WMS and operational inventory platform for Modern State. The exi
 
 ## Safety status
 
-This repository is in foundation construction. Production operations and all Square writes are disabled. Do not expose it to operational users yet.
+This repository is in foundation construction. Production operations, walking-zone publication, storefront availability and all Square writes are disabled. The fulfillment screens are an internal draft control plane, not a production quote source.
 
 ## Stack
 
@@ -25,11 +25,13 @@ npm run build
 
 The repository now contains the permanent initial schema for locations, location-scoped RBAC, audit, idempotency, inbox/outbox, owner lots, containers, versioned manifests, seals and an append-only inventory ledger. See [Inventory Foundation](docs/inventory-foundation.md).
 
-Database-backed write APIs remain intentionally unavailable until authentication, authorization, transaction services and integration tests are implemented.
+Authentication, invitation acceptance, user administration, location-scoped authorization and the first idempotent box-creation command are implemented. Boxes now have scanner-ready lookup and a read-only detail view covering locations, manifest, projected contents, ledger and seals. Inventory content and movement mutations remain locked while the product catalog, transactional services and integration tests are built.
+
+The fulfillment foundation now also separates two operational paths: walking delivery goes directly from the selected store to the customer, while carrier shipping backed by store inventory is reserved at the store, retrieved through the Englewood warehouse and adds two business days to the warehouse-carrier promise. The internal `/operations/fulfillment` control plane includes five walking-zone drafts, deterministic geometry validation and evaluation, location-scoped draft editing, and incomplete store-to-warehouse policy shells. Saving a draft never publishes it. See [Fulfillment and walking delivery](docs/fulfillment-walking-delivery.md) and [E-commerce integration readiness](docs/ecommerce-walking-integration.md).
 
 See [Supabase Database](docs/supabase.md) for connection modes, RLS hardening, migrations and environment separation.
 
 Health endpoints:
 
 - `/api/health`: process liveness and safety state.
-- `/api/health/ready`: uncached Supabase connectivity readiness.
+- `/api/health/ready`: uncached readiness for Supabase PostgreSQL and Auth. It returns only stable public dependency codes.

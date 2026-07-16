@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "./orderpro-webhooks-v1.schema.json",
+  "title": "OrderPRO webhook catalog v1",
+  "description": "Catalog of v1 event envelopes. walking_zones.published has a stable payload-specific schema. Other listed event names are reserved and validate only the common envelope until a payload-specific schema is approved.",
+  "oneOf": [
+    {
+      "$ref": "walking-zones-published-event-v1.schema.json"
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "orderpro-event-envelope-v1.schema.json"
+        },
+        {
+          "properties": {
+            "eventType": {
+              "not": {
+                "const": "orderpro.walking_zones.published"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

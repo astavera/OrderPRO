@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "./walking-zones-published-event-v1.schema.json",
+  "title": "OrderPRO walking zones published event v1",
+  "description": "Payload-specific contract for orderpro.walking_zones.published. Webhook signatures are HTTP headers and are not part of this JSON object.",
+  "allOf": [
+    {
+      "$ref": "orderpro-event-envelope-v1.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "eventType",
+        "payload"
+      ],
+      "properties": {
+        "eventType": {
+          "const": "orderpro.walking_zones.published"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "publicationId",
+            "versionNumber",
+            "schemaVersion",
+            "digest",
+            "snapshotUrl"
+          ],
+          "properties": {
+            "publicationId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "versionNumber": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "schemaVersion": {
+              "const": "orderpro.walking-zones.v1"
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "snapshotUrl": {
+              "type": "string",
+              "pattern": "^/v1/walking-zones/published/[1-9][0-9]*$"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "eventId": "evt_01JZZZZZZZZZZZZZZZZZZZZZZZ",
+      "schemaVersion": "orderpro.event.v1",
+      "eventType": "orderpro.walking_zones.published",
+      "occurredAt": "2026-07-20T18:00:00Z",
+      "correlationId": "cor_01JZZZZZZZZZZZZZZZZZZZZZZZ",
+      "entityId": "publication_4",
+      "entityVersion": 4,
+      "payload": {
+        "publicationId": "publication_4",
+        "versionNumber": 4,
+        "schemaVersion": "orderpro.walking-zones.v1",
+        "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "snapshotUrl": "/v1/walking-zones/published/4"
+      }
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+import Link from "next/link";
+import { getUserManagementPageData } from "@/application/admin/user-management";
+import { roleLabels } from "@/application/auth/permissions";
+import { InviteUserForm } from "./invite-user-form";
+import { RolePermissionMatrix } from "./role-permission-matrix";
+
+export const dynamic = "force-dynamic";
+
+export default async function UserAdministrationPage() {
+  const data = await getUserManagementPageData();
+
+  return <section><p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-400">Administration</p><h1 className="mt-2 text-4xl font-semibold">Users & access</h1><p className="mt-3 text-slate-400">Invite team members and manage their roles, operational locations and account status.</p>
+    <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5"><h2 className="text-2xl font-semibold">Invite user</h2><p className="mt-2 text-sm text-slate-400">Invitations create the Supabase identity and the location-scoped OrderPRO account together.</p><InviteUserForm configured={data.invitationsConfigured} locations={data.locations} roles={data.roles} /></section>
+    <section className="mt-8"><div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-2xl font-semibold">Managed users</h2><p className="mt-1 text-sm text-slate-400">{data.users.length} account{data.users.length === 1 ? "" : "s"}</p></div><Link className="rounded-xl border border-slate-700 px-4 py-2 text-sm hover:border-emerald-400/60" href="/operations/admin/audit">View access audit</Link></div><div className="mt-4 overflow-x-auto rounded-2xl border border-slate-800"><table className="w-full min-w-[760px] text-left text-sm"><caption className="sr-only">OrderPRO users and access status</caption><thead className="bg-slate-900 text-slate-400"><tr><th className="px-4 py-3" scope="col">User</th><th className="px-4 py-3" scope="col">Roles</th><th className="px-4 py-3" scope="col">Locations</th><th className="px-4 py-3" scope="col">Status</th><th className="px-4 py-3" scope="col">Action</th></tr></thead><tbody>{data.users.map((user) => <tr className="border-t border-slate-800" key={user.id}><td className="px-4 py-3"><span className="font-medium">{user.displayName}</span><span className="block text-slate-500">{user.email}</span></td><td className="px-4 py-3"><div className="flex flex-wrap gap-1">{user.roles.map((role) => <span className="rounded-full bg-slate-800 px-2 py-1 text-xs" key={role}>{roleLabels[role]}</span>)}</div></td><td className="px-4 py-3 text-slate-300">{user.locations.join(" · ") || "—"}</td><td className="px-4 py-3"><span className={user.active ? "text-emerald-300" : "text-amber-300"}>{user.active ? "Active" : "Inactive"}</span></td><td className="px-4 py-3"><Link className="font-medium text-emerald-300 hover:text-emerald-200" href={`/operations/admin/users/${user.id}`}>Edit</Link></td></tr>)}{data.users.length === 0 ? <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={5}>No managed users.</td></tr> : null}</tbody></table></div></section>
+    <section className="mt-8"><h2 className="text-2xl font-semibold">Role permissions</h2><p className="mb-4 mt-2 text-sm text-slate-400">Multiple roles combine their allowed permissions. Role definitions are controlled in code and cannot be edited from the browser.</p><RolePermissionMatrix roles={data.roles} /></section>
+  </section>;
+}

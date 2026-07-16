@@ -18,8 +18,12 @@ export function generateBoxCode() {
   return `BX-${body}${checksum(body)}`;
 }
 
+export function normalizeBoxCode(value: string) {
+  return value.trim().toUpperCase();
+}
+
 export function isValidBoxCode(value: string) {
-  const normalized = value.trim().toUpperCase();
+  const normalized = normalizeBoxCode(value);
   if (!/^BX-[2-9A-HJ-NP-Z]{10}$/.test(normalized)) return false;
   const body = normalized.slice(3, -1);
   return normalized.at(-1) === checksum(body);

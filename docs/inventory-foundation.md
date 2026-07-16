@@ -1,6 +1,6 @@
 # Inventory Foundation
 
-Status: schema and pure domain invariants implemented; database-backed workflows and production UI remain disabled.
+Status: schema, pure domain invariants and read-only box inspection implemented; database-backed inventory mutations remain disabled.
 
 ## Implemented boundaries
 
@@ -13,6 +13,12 @@ Status: schema and pure domain invariants implemented; database-backed workflows
 - `ContainerContentProjection` is derived state and may be rebuilt from the ordered ledger.
 
 Box codes use a `BX-` prefix, a scanner-safe alphabet without ambiguous characters, random entropy and a check character. Codes are identifiers, not secrets.
+
+## Read-only box inspection
+
+Authorized users can search a box by scanner-safe code and open its detail page. Visibility is granted when the box is commercially owned by an assigned active location or is physically present there. The same scoped database predicate protects both the list and the detail query so an out-of-scope code is indistinguishable from a missing code.
+
+The detail page exposes the current locations, aggregate version, latest manifest, content projection, recent ledger entries and seal history. It does not expose mutation controls while `inventory.mutations` and `warehouse.box_workflow` remain locked. Product and owner-lot synchronization is the prerequisite for the first packing command.
 
 ## Transaction boundary for a future scan command
 

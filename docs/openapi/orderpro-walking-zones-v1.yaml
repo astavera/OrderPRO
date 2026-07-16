@@ -1,0 +1,1511 @@
+openapi: 3.1.0
+info:
+  title: OrderPRO Walking Zones and Delivery API
+  version: 1.0.0-draft
+  summary: Administrative walking-zone, quote, snapshot, slot and reservation contract
+  description: |
+    This is a staged contract, not a production-readiness statement. Operations
+    marked dependency-blocked require their phase, feature flags, commercial
+    configuration and machine authentication to be approved before use.
+
+    OrderPRO does not accept payment or production Square writes through this API.
+    The e-commerce must not write OrderPRO data directly, and OrderPRO must not
+    write the e-commerce database directly.
+  contact:
+    name: OrderPRO operations
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+x-orderpro-production-ready: false
+x-orderpro-contract-status: draft
+servers:
+  - url: https://orderpro.invalid
+    description: Placeholder only; replace with an approved environment URL.
+security:
+  - MachineBearer: []
+tags:
+  - name: Walking zone drafts
+  - name: Walking zone versions
+  - name: Published snapshots
+  - name: Walking delivery quotes
+  - name: Availability
+  - name: Reservations
+
+paths:
+  /v1/walking-zones:
+    get:
+      tags: [Walking zone drafts]
+      operationId: listWalkingZones
+      summary: List walking-zone aggregates
+      description: Administrative read. Results are filtered by caller authorization and query filters.
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:read]
+      parameters:
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/LocationIdFilter'
+        - $ref: '#/components/parameters/PostalCodeFilter'
+        - $ref: '#/components/parameters/EffectiveAtFilter'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Authorized walking zones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalkingZoneListResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /v1/walking-zones/{id}:
+    get:
+      tags: [Walking zone drafts]
+      operationId: getWalkingZone
+      summary: Get one walking-zone aggregate
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:read]
+      parameters:
+        - $ref: '#/components/parameters/WalkingZoneId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Walking-zone aggregate
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalkingZoneResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/walking-zones/drafts:
+    post:
+      tags: [Walking zone drafts]
+      operationId: createWalkingZoneDraft
+      summary: Create a walking-zone draft
+      description: Saves DRAFT configuration only. It never publishes or changes checkout behavior.
+      x-orderpro-phase: 1
+      x-orderpro-contract-status: internal-draft-only
+      x-orderpro-required-scopes: [walking-zones:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWalkingZoneDraftRequest'
+      responses:
+        '201':
+          description: Draft created or an identical completed command replayed
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalkingZoneResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/walking-zones/drafts/{id}:
+    put:
+      tags: [Walking zone drafts]
+      operationId: updateWalkingZoneDraft
+      summary: Replace editable fields of a walking-zone draft
+      description: Published and archived versions are immutable. Editing invalidates prior validation evidence.
+      x-orderpro-phase: 1
+      x-orderpro-contract-status: internal-draft-only
+      x-orderpro-required-scopes: [walking-zones:write]
+      parameters:
+        - $ref: '#/components/parameters/WalkingZoneId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWalkingZoneDraftRequest'
+      responses:
+        '200':
+          description: Updated draft or identical command replay
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalkingZoneResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      tags: [Walking zone drafts]
+      operationId: deleteWalkingZoneDraft
+      summary: Delete an unreferenced draft
+      description: Only a DRAFT with no immutable/order references is eligible. Audit history is retained.
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:write]
+      parameters:
+        - $ref: '#/components/parameters/WalkingZoneId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteDraftRequest'
+      responses:
+        '204':
+          description: Draft deleted or identical command replayed
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/walking-zones/drafts/{id}/validate:
+    post:
+      tags: [Walking zone drafts]
+      operationId: validateWalkingZoneDraft
+      summary: Validate a draft without publishing it
+      description: Requires approved geometry, topology, fee and slot validators.
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:write]
+      parameters:
+        - $ref: '#/components/parameters/WalkingZoneId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateDraftRequest'
+      responses:
+        '200':
+          description: Deterministic validation result; valid does not mean published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/walking-zones/drafts/{id}/preview-address:
+    post:
+      tags: [Walking zone drafts]
+      operationId: previewWalkingZoneAddress
+      summary: Preview an address or point against DRAFT configuration
+      description: Administrative diagnostic only. The response always identifies the draft/version used.
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:write]
+      x-orderpro-required-configuration:
+        - approved-geocoder
+        - approved-walking-route-provider
+        - gis-validator
+      parameters:
+        - $ref: '#/components/parameters/WalkingZoneId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewAddressRequest'
+      responses:
+        '200':
+          description: Draft preview result, including ineligible reason codes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewAddressResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /v1/walking-zones/drafts/{id}/publish:
+    post:
+      tags: [Walking zone drafts]
+      operationId: publishWalkingZoneDraft
+      summary: Publish an immutable snapshot version
+      description: Explicit privileged command. It reruns validation and never modifies an existing version.
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:publish]
+      x-orderpro-required-configuration:
+        - approved-geometry
+        - approved-general-fees
+        - approved-slot-policies
+        - publication-feature-enabled
+      parameters:
+        - $ref: '#/components/parameters/WalkingZoneId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishDraftRequest'
+      responses:
+        '201':
+          description: New immutable publication created or identical command replayed
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /v1/walking-zones/versions:
+    get:
+      tags: [Walking zone versions]
+      operationId: listWalkingZoneVersions
+      summary: List immutable walking-zone versions
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:read]
+      parameters:
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/LocationIdFilter'
+        - $ref: '#/components/parameters/PostalCodeFilter'
+        - $ref: '#/components/parameters/EffectiveAtFilter'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Version history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalkingZoneVersionListResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/walking-zones/versions/{id}:
+    get:
+      tags: [Walking zone versions]
+      operationId: getWalkingZoneVersion
+      summary: Get an immutable walking-zone version
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:read]
+      parameters:
+        - $ref: '#/components/parameters/WalkingZoneVersionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Immutable version
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalkingZoneVersionResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/walking-zones/versions/{id}/rollback:
+    post:
+      tags: [Walking zone versions]
+      operationId: rollbackWalkingZoneVersion
+      summary: Publish a new version copied from historical content
+      description: Rollback is a new privileged publication, never an in-place status edit.
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:rollback]
+      parameters:
+        - $ref: '#/components/parameters/WalkingZoneVersionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackVersionRequest'
+      responses:
+        '201':
+          description: New rollback publication created or identical command replayed
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/walking-zones/versions/{id}/archive:
+    post:
+      tags: [Walking zone versions]
+      operationId: archiveWalkingZoneVersion
+      summary: Archive an eligible non-current version
+      description: Retains immutable snapshot, references and audit history.
+      x-orderpro-phase: 2
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:publish]
+      parameters:
+        - $ref: '#/components/parameters/WalkingZoneVersionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchiveVersionRequest'
+      responses:
+        '200':
+          description: Archived immutable version or identical command replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalkingZoneVersionResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/walking-zones/published:
+    get:
+      tags: [Published snapshots]
+      operationId: getCurrentPublishedWalkingZones
+      summary: Get the currently effective published snapshot
+      description: Checkout bootstrap. Returns no draft content.
+      x-orderpro-phase: 3
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:read]
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Current immutable snapshot
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            X-OrderPRO-Digest:
+              $ref: '#/components/headers/Digest'
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/walking-zones-snapshot-v1.schema.json'
+        '304':
+          description: Caller already has the current ETag
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No approved publication is effective
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /v1/walking-zones/published/{versionNumber}:
+    get:
+      tags: [Published snapshots]
+      operationId: getPublishedWalkingZonesVersion
+      summary: Get one immutable published snapshot by version number
+      x-orderpro-phase: 3
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:read]
+      parameters:
+        - $ref: '#/components/parameters/PublishedVersionNumber'
+        - $ref: '#/components/parameters/IfNoneMatch'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Requested immutable snapshot
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            X-OrderPRO-Digest:
+              $ref: '#/components/headers/Digest'
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/walking-zones-snapshot-v1.schema.json'
+        '304':
+          description: Caller already has this ETag
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/walking-delivery/quotes:
+    post:
+      tags: [Walking delivery quotes]
+      operationId: createWalkingDeliveryQuote
+      summary: Calculate a walking-delivery quote from an address
+      description: |
+        Server-side quote against approved immutable configuration. OrderPRO must
+        normalize and geocode the address, evaluate official point-in-polygon
+        geometry, obtain server-trusted walking route metrics, apply the selected
+        store's exact fee-policy version, and return live slots for that selected
+        store only. The caller cannot supply coordinates, route metrics, fee,
+        selected store, or slot availability.
+
+        This operation is a dependency-blocked contract. It is not available for
+        production use until M2M authentication, an approved geocoder, an approved
+        walking-route provider, official geometry, published fee configuration,
+        and live slot capacity are configured and certified. It never falls back
+        silently to another store when the selected store has no slots.
+      x-orderpro-phase: 3
+      x-orderpro-contract-status: dependency-blocked
+      x-orderpro-required-scopes: [walking-zones:read, availability:read]
+      x-orderpro-required-configuration:
+        - machine-to-machine-authentication
+        - walking-delivery-quote-feature-enabled
+        - approved-geocoder
+        - approved-walking-route-provider
+        - official-walking-zone-geometry
+        - published-walking-fee-policy
+        - live-slot-capacity-service
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: X-Correlation-ID
+          in: header
+          required: true
+          description: Caller-generated stable correlation ID returned in the response.
+          schema: { $ref: '#/components/schemas/StableId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WalkingDeliveryQuoteRequest'
+            examples:
+              eligible:
+                summary: Contract fixture that could produce an eligible quote
+                value:
+                  address: 100 Fixture Street, New York, NY 10075
+                  serviceAt: '2026-07-20T15:00:00-04:00'
+                  subtotalCents: 10000
+              managerReview:
+                summary: Contract fixture whose trusted route is over 3,250 feet
+                value:
+                  address: 200 Fixture Street, New York, NY 10075
+                  serviceAt: '2026-07-20T15:00:00-04:00'
+                  subtotalCents: 10000
+              noSlots:
+                summary: Contract fixture whose selected store has no live slots
+                value:
+                  address: 300 Fixture Street, New York, NY 10021
+                  serviceAt: '2026-07-20T15:00:00-04:00'
+                  subtotalCents: 10000
+      responses:
+        '200':
+          description: Deterministic quote result for the selected store; identical idempotent retries return the original result
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/walking-delivery-quote-v1.schema.json'
+              examples:
+                eligible:
+                  summary: Eligible fixture at the inclusive 1,200-foot boundary
+                  value:
+                    schemaVersion: orderpro.walking-delivery-quote.v1
+                    quoteId: quote_fixture_eligible
+                    replayed: false
+                    eligible: true
+                    normalizedAddress: 100 Fixture Street, New York, NY 10075
+                    customerCoordinates: [-73.958, 40.773]
+                    postalCode: '10075'
+                    selectedLocationId: store-3rd-avenue
+                    zoneVersionId: zonev_fixture_10075_4
+                    feePolicyVersionId: feepv_fixture_third_1
+                    routingProvider: fixture-router
+                    routingProfile: walking
+                    distanceFeet: 1200
+                    durationSeconds: 540
+                    feeCents: 0
+                    tierId: UP_TO_1200_FT
+                    reasonCode: ELIGIBLE
+                    calculatedAt: '2026-07-20T18:00:00Z'
+                    slots:
+                      - slotId: slot_fixture_third_1
+                        locationId: store-3rd-avenue
+                        startsAt: '2026-07-20T19:00:00Z'
+                        endsAt: '2026-07-20T19:30:00Z'
+                        remainingCapacity: 1
+                    correlationId: cor_fixture_quote_eligible
+                managerReview:
+                  summary: More than 3,250 feet requires manager review and no automatic fee or slots
+                  value:
+                    schemaVersion: orderpro.walking-delivery-quote.v1
+                    quoteId: quote_fixture_review
+                    replayed: false
+                    eligible: false
+                    normalizedAddress: 200 Fixture Street, New York, NY 10075
+                    customerCoordinates: [-73.95, 40.775]
+                    postalCode: '10075'
+                    selectedLocationId: store-86th-street
+                    zoneVersionId: zonev_fixture_10075_4
+                    feePolicyVersionId: feepv_fixture_86th_1
+                    routingProvider: fixture-router
+                    routingProfile: walking
+                    distanceFeet: 3250.01
+                    durationSeconds: 1200
+                    feeCents: null
+                    tierId: OVER_3250_FT_MANAGER_REVIEW
+                    reasonCode: MANAGER_REVIEW
+                    calculatedAt: '2026-07-20T18:01:00Z'
+                    slots: []
+                    correlationId: cor_fixture_quote_review
+                noSlots:
+                  summary: The selected store has no slots and is not replaced by another store
+                  value:
+                    schemaVersion: orderpro.walking-delivery-quote.v1
+                    quoteId: quote_fixture_no_slots
+                    replayed: false
+                    eligible: false
+                    normalizedAddress: 300 Fixture Street, New York, NY 10021
+                    customerCoordinates: [-73.96, 40.77]
+                    postalCode: '10021'
+                    selectedLocationId: store-3rd-avenue
+                    zoneVersionId: zonev_fixture_10021_2
+                    feePolicyVersionId: feepv_fixture_third_1
+                    routingProvider: fixture-router
+                    routingProfile: walking
+                    distanceFeet: 1760
+                    durationSeconds: 720
+                    feeCents: 1000
+                    tierId: UP_TO_2300_FT
+                    reasonCode: NO_AVAILABLE_SLOTS
+                    calculatedAt: '2026-07-20T18:02:00Z'
+                    slots: []
+                    correlationId: cor_fixture_quote_no_slots
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: One or more mandatory quote dependencies or safety gates are unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                code: DEPENDENCY_BLOCKED
+                message: Walking-delivery quoting is not enabled in this environment.
+                correlationId: cor_fixture_quote_blocked
+                details:
+                  - dependency: machine-to-machine-authentication
+                    ready: false
+                  - dependency: approved-geocoder
+                    ready: false
+                  - dependency: approved-walking-route-provider
+                    ready: false
+                  - dependency: official-walking-zone-geometry
+                    ready: false
+                  - dependency: live-slot-capacity-service
+                    ready: false
+
+  /v1/availability/slots:
+    get:
+      tags: [Availability]
+      operationId: listWalkingDeliverySlots
+      summary: Read live slots for the already selected store
+      description: Does not select or silently replace the store. Live capacity is separate from the published policy snapshot.
+      x-orderpro-phase: 3
+      x-orderpro-contract-status: provisional-dependency-blocked
+      x-orderpro-required-scopes: [availability:read]
+      x-orderpro-required-configuration:
+        - approved-slot-policy
+        - live-capacity-service
+      parameters:
+        - name: locationId
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/StableId' }
+        - name: serviceDate
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: orderProZoneVersionId
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/StableId' }
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Slots for the requested location only
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotsResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /v1/reservations:
+    post:
+      tags: [Reservations]
+      operationId: createWalkingDeliveryReservation
+      summary: Hold one selected walking-delivery slot
+      description: OrderPRO determines expiration from configured policy; callers must not invent a hold lifetime.
+      x-orderpro-phase: 3
+      x-orderpro-contract-status: provisional-dependency-blocked
+      x-orderpro-required-scopes: [reservations:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReservationRequest'
+      responses:
+        '201':
+          description: Capacity hold created or identical command replayed
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /v1/reservations/{id}:
+    get:
+      tags: [Reservations]
+      operationId: getWalkingDeliveryReservation
+      summary: Get a reservation for retry/reconciliation
+      x-orderpro-phase: 3
+      x-orderpro-contract-status: provisional-dependency-blocked
+      x-orderpro-required-scopes: [reservations:write]
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Current reservation state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/reservations/{id}/confirm:
+    post:
+      tags: [Reservations]
+      operationId: confirmWalkingDeliveryReservation
+      summary: Confirm a held slot after checkout succeeds
+      x-orderpro-phase: 3
+      x-orderpro-contract-status: provisional-dependency-blocked
+      x-orderpro-required-scopes: [reservations:write]
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmReservationRequest'
+      responses:
+        '200':
+          description: Reservation confirmed or identical command replayed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/reservations/{id}/release:
+    post:
+      tags: [Reservations]
+      operationId: releaseWalkingDeliveryReservation
+      summary: Release a held reservation after failure or cancellation
+      x-orderpro-phase: 3
+      x-orderpro-contract-status: provisional-dependency-blocked
+      x-orderpro-required-scopes: [reservations:write]
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseReservationRequest'
+      responses:
+        '200':
+          description: Reservation released or identical command replayed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+webhooks:
+  walkingZonesPublished:
+    post:
+      operationId: receiveWalkingZonesPublished
+      summary: Notify a subscriber that a new immutable walking-zone snapshot was published
+      description: The subscriber downloads snapshotUrl and validates schema and digest before activation.
+      security: []
+      x-orderpro-phase: 4
+      x-orderpro-contract-status: dependency-blocked
+      parameters:
+        - $ref: '#/components/parameters/WebhookKeyId'
+        - $ref: '#/components/parameters/WebhookTimestamp'
+        - $ref: '#/components/parameters/WebhookEventId'
+        - $ref: '#/components/parameters/WebhookSignature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/walking-zones-published-event-v1.schema.json'
+      responses:
+        '200':
+          description: Event durably accepted or already processed
+        '202':
+          description: Event durably accepted for asynchronous processing
+        '400':
+          description: Invalid envelope or event payload
+        '401':
+          description: Invalid signature, key or replay timestamp
+        '409':
+          description: Event ID conflicts with different content
+        '500':
+          description: Subscriber failure; OrderPRO may retry
+
+components:
+  securitySchemes:
+    MachineBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: M2M access token
+      description: |
+        Target machine credential. Issuer, audience, token endpoint and exact
+        format are not configured by this contract. Human cookies are invalid.
+
+  parameters:
+    WalkingZoneId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/StableId' }
+    WalkingZoneVersionId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/StableId' }
+    ReservationId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/StableId' }
+    PublishedVersionNumber:
+      name: versionNumber
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique command key. Reuse is valid only with identical semantic content.
+      schema: { type: string, minLength: 8, maxLength: 200 }
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      schema: { $ref: '#/components/schemas/StableId' }
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      schema: { type: string }
+    StatusFilter:
+      name: status
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/WalkingZoneStatus' }
+    LocationIdFilter:
+      name: locationId
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/StableId' }
+    PostalCodeFilter:
+      name: postalCode
+      in: query
+      required: false
+      schema: { type: string, pattern: '^[0-9]{5}$' }
+    EffectiveAtFilter:
+      name: effectiveAt
+      in: query
+      required: false
+      schema: { type: string, format: date-time }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 500 }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    WebhookKeyId:
+      name: X-OrderPRO-Key-Id
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 160 }
+    WebhookTimestamp:
+      name: X-OrderPRO-Timestamp
+      in: header
+      required: true
+      schema: { type: integer, minimum: 1 }
+    WebhookEventId:
+      name: X-OrderPRO-Event-Id
+      in: header
+      required: true
+      schema: { $ref: '#/components/schemas/StableId' }
+    WebhookSignature:
+      name: X-OrderPRO-Signature
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^v1=[A-Za-z0-9_-]+$'
+
+  headers:
+    ETag:
+      description: Stable validator for the exact resource representation.
+      schema: { type: string }
+    Digest:
+      description: Same lowercase sha256 digest carried in the published snapshot body.
+      schema: { $ref: '#/components/schemas/Sha256Digest' }
+
+  responses:
+    Unauthorized:
+      description: Missing, invalid, expired or incorrectly targeted machine credential
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Credential lacks the required scope or resource/location authorization
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Resource not found or not visible to the caller
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Idempotency conflict, stale version or incompatible state transition
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unprocessable:
+      description: Domain input or configuration validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    RateLimited:
+      description: Configured client rate policy exceeded; concrete limits are deployment-specific
+      headers:
+        Retry-After:
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    DependencyUnavailable:
+      description: Required configured service or feature is unavailable/locked
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    StableId:
+      type: string
+      minLength: 1
+      maxLength: 200
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+    Sha256Digest:
+      type: string
+      pattern: '^sha256:[0-9a-f]{64}$'
+    WalkingZoneStatus:
+      type: string
+      enum: [DRAFT, VALIDATED, PUBLISHED, ARCHIVED]
+    AssignmentStrategy:
+      type: string
+      enum: [FIXED, NEAREST_WALKING_ROUTE]
+    DayOfWeek:
+      type: string
+      enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
+    ReasonCode:
+      type: string
+      enum:
+        - ELIGIBLE
+        - INVALID_INPUT
+        - INVALID_ADDRESS
+        - GEOCODING_FAILED
+        - AMBIGUOUS_ADDRESS
+        - OUTSIDE_WALKING_ZONE
+        - NO_ACTIVE_ZONE
+        - SERVICE_DAY_UNAVAILABLE
+        - INVALID_ZONE_CONFIGURATION
+        - STORE_NOT_AVAILABLE
+        - ROUTE_METRICS_REQUIRED
+        - DISTANCE_EXCEEDED
+        - ROUTE_TIME_EXCEEDED
+        - MINIMUM_ORDER_NOT_MET
+        - FEE_POLICY_INCOMPLETE
+        - SLOT_POLICY_INCOMPLETE
+        - NO_AVAILABLE_SLOTS
+        - MANAGER_REVIEW
+    GeoJsonPosition:
+      type: array
+      prefixItems:
+        - { type: number, minimum: -180, maximum: 180 }
+        - { type: number, minimum: -90, maximum: 90 }
+      items: false
+      minItems: 2
+      maxItems: 2
+    GeoJsonLinearRing:
+      type: array
+      minItems: 4
+      items: { $ref: '#/components/schemas/GeoJsonPosition' }
+    GeoJsonPolygonCoordinates:
+      type: array
+      minItems: 1
+      items: { $ref: '#/components/schemas/GeoJsonLinearRing' }
+    GeoJsonGeometry:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, coordinates]
+          properties:
+            type: { const: Polygon }
+            coordinates: { $ref: '#/components/schemas/GeoJsonPolygonCoordinates' }
+        - type: object
+          additionalProperties: false
+          required: [type, coordinates]
+          properties:
+            type: { const: MultiPolygon }
+            coordinates:
+              type: array
+              minItems: 1
+              items: { $ref: '#/components/schemas/GeoJsonPolygonCoordinates' }
+    PolicyMap:
+      type: object
+      propertyNames: { $ref: '#/components/schemas/StableId' }
+      additionalProperties: { $ref: '#/components/schemas/StableId' }
+    WalkingZone:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - slug
+        - name
+        - postalCodes
+        - serviceMode
+        - assignmentStrategy
+        - locationIds
+        - status
+        - version
+        - currentVersionNumber
+        - createdAt
+        - updatedAt
+      properties:
+        id: { $ref: '#/components/schemas/StableId' }
+        slug: { $ref: '#/components/schemas/StableId' }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        postalCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, pattern: '^[0-9]{5}$' }
+        priority:
+          oneOf: [{ type: integer }, { type: 'null' }]
+        serviceMode: { const: WALKING }
+        assignmentStrategy: { $ref: '#/components/schemas/AssignmentStrategy' }
+        locationIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/StableId' }
+        geometry:
+          oneOf:
+            - { $ref: '#/components/schemas/GeoJsonGeometry' }
+            - { type: 'null' }
+        activeDays:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/DayOfWeek' }
+        maxDistanceMiles:
+          oneOf: [{ type: number, exclusiveMinimum: 0 }, { type: 'null' }]
+        maxRouteMinutes:
+          oneOf: [{ type: integer, minimum: 1 }, { type: 'null' }]
+        minimumOrderCents:
+          oneOf: [{ type: integer, minimum: 0 }, { type: 'null' }]
+        feePolicyByLocation: { $ref: '#/components/schemas/PolicyMap' }
+        slotPolicyByLocation: { $ref: '#/components/schemas/PolicyMap' }
+        status: { $ref: '#/components/schemas/WalkingZoneStatus' }
+        version: { type: integer, minimum: 1 }
+        currentVersionNumber: { type: integer, minimum: 0 }
+        effectiveFrom:
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
+        effectiveTo:
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        createdBy: { $ref: '#/components/schemas/StableId' }
+        publishedBy:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+    WalkingZoneInput:
+      type: object
+      additionalProperties: false
+      required: [slug, name, postalCodes, assignmentStrategy, locationIds]
+      properties:
+        slug: { $ref: '#/components/schemas/StableId' }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        postalCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, pattern: '^[0-9]{5}$' }
+        priority:
+          oneOf: [{ type: integer }, { type: 'null' }]
+        assignmentStrategy: { $ref: '#/components/schemas/AssignmentStrategy' }
+        locationIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/StableId' }
+        geometry:
+          oneOf:
+            - { $ref: '#/components/schemas/GeoJsonGeometry' }
+            - { type: 'null' }
+        activeDays:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/DayOfWeek' }
+        maxDistanceMiles:
+          oneOf: [{ type: number, exclusiveMinimum: 0 }, { type: 'null' }]
+        maxRouteMinutes:
+          oneOf: [{ type: integer, minimum: 1 }, { type: 'null' }]
+        minimumOrderCents:
+          oneOf: [{ type: integer, minimum: 0 }, { type: 'null' }]
+        feePolicyByLocation: { $ref: '#/components/schemas/PolicyMap' }
+        slotPolicyByLocation: { $ref: '#/components/schemas/PolicyMap' }
+        effectiveFrom:
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
+        effectiveTo:
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
+        expectedVersion: { type: integer, minimum: 1 }
+    CreateWalkingZoneDraftRequest:
+      allOf:
+        - { $ref: '#/components/schemas/WalkingZoneInput' }
+        - not:
+            required: [expectedVersion]
+    UpdateWalkingZoneDraftRequest:
+      allOf:
+        - { $ref: '#/components/schemas/WalkingZoneInput' }
+        - type: object
+          required: [expectedVersion]
+          properties:
+            expectedVersion: { type: integer, minimum: 1 }
+    DeleteDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reason]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    ValidateDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+    ValidationIssue:
+      type: object
+      additionalProperties: false
+      required: [reasonCode, message]
+      properties:
+        reasonCode: { $ref: '#/components/schemas/ReasonCode' }
+        path: { type: string, maxLength: 500 }
+        message: { type: string, minLength: 1, maxLength: 1000 }
+    ValidationResponse:
+      type: object
+      additionalProperties: false
+      required: [walkingZoneId, draftVersion, valid, status, issues, correlationId]
+      properties:
+        walkingZoneId: { $ref: '#/components/schemas/StableId' }
+        draftVersion: { type: integer, minimum: 1 }
+        valid: { type: boolean }
+        status: { $ref: '#/components/schemas/WalkingZoneStatus' }
+        issues:
+          type: array
+          items: { $ref: '#/components/schemas/ValidationIssue' }
+        correlationId: { $ref: '#/components/schemas/StableId' }
+    WalkingDeliveryQuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [address, serviceAt, subtotalCents]
+      properties:
+        address:
+          type: string
+          minLength: 5
+          maxLength: 500
+          description: Full customer address to be normalized and geocoded server-side; never log it without approved redaction.
+        serviceAt:
+          type: string
+          format: date-time
+          description: Requested service instant including an explicit UTC offset.
+        subtotalCents:
+          type: integer
+          minimum: 0
+          description: Order subtotal in integer USD cents. The client cannot submit a fee or selected store.
+    PreviewAddressRequest:
+      type: object
+      additionalProperties: false
+      required: [subtotalCents, serviceAt]
+      properties:
+        address: { type: string, minLength: 5, maxLength: 500 }
+        point: { $ref: '#/components/schemas/GeoJsonPosition' }
+        postalCode: { type: string, pattern: '^[0-9]{5}$' }
+        subtotalCents: { type: integer, minimum: 0 }
+        serviceAt: { type: string, format: date-time }
+      oneOf:
+        - required: [address]
+          not: { required: [point] }
+        - required: [point, postalCode]
+          not: { required: [address] }
+    RouteCandidate:
+      type: object
+      additionalProperties: false
+      required: [locationId]
+      properties:
+        locationId: { $ref: '#/components/schemas/StableId' }
+        walkingDistanceMiles:
+          oneOf: [{ type: number, minimum: 0 }, { type: 'null' }]
+        walkingDurationMinutes:
+          oneOf: [{ type: integer, minimum: 0 }, { type: 'null' }]
+    PreviewAddressResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - configurationStatus
+        - eligible
+        - postalCode
+        - point
+        - zoneVersionId
+        - candidates
+        - reasonCode
+        - correlationId
+      properties:
+        configurationStatus: { const: DRAFT }
+        eligible: { type: boolean }
+        postalCode:
+          oneOf: [{ type: string, pattern: '^[0-9]{5}$' }, { type: 'null' }]
+        point:
+          oneOf: [{ $ref: '#/components/schemas/GeoJsonPosition' }, { type: 'null' }]
+        matchedZoneId:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+        zoneVersionId: { $ref: '#/components/schemas/StableId' }
+        assignmentStrategy:
+          oneOf: [{ $ref: '#/components/schemas/AssignmentStrategy' }, { type: 'null' }]
+        candidates:
+          type: array
+          items: { $ref: '#/components/schemas/RouteCandidate' }
+        selectedLocationId:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+        feePolicyId:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+        feeCents:
+          oneOf: [{ type: integer, minimum: 0 }, { type: 'null' }]
+        slotPolicyId:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+        reasonCode: { $ref: '#/components/schemas/ReasonCode' }
+        correlationId: { $ref: '#/components/schemas/StableId' }
+    PublishDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, effectiveFrom, reason]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo:
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    RollbackVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [effectiveFrom, reason]
+      properties:
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo:
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    ArchiveVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    WalkingZoneVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - walkingZoneId
+        - versionNumber
+        - status
+        - digest
+        - snapshot
+        - createdAt
+        - createdBy
+      properties:
+        id: { $ref: '#/components/schemas/StableId' }
+        walkingZoneId: { $ref: '#/components/schemas/StableId' }
+        versionNumber: { type: integer, minimum: 1 }
+        status: { $ref: '#/components/schemas/WalkingZoneStatus' }
+        digest: { $ref: '#/components/schemas/Sha256Digest' }
+        snapshot: { $ref: '../schemas/walking-zones-snapshot-v1.schema.json#/$defs/walkingZone' }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo:
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
+        createdAt: { type: string, format: date-time }
+        createdBy: { $ref: '#/components/schemas/StableId' }
+        publishedAt:
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
+        publishedBy:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+        rollbackOfVersionId:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+    PageMeta:
+      type: object
+      additionalProperties: false
+      required: [nextCursor]
+      properties:
+        nextCursor:
+          oneOf: [{ type: string }, { type: 'null' }]
+    WalkingZoneResponse:
+      type: object
+      additionalProperties: false
+      required: [data, correlationId]
+      properties:
+        data: { $ref: '#/components/schemas/WalkingZone' }
+        correlationId: { $ref: '#/components/schemas/StableId' }
+    WalkingZoneListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, page, correlationId]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/WalkingZone' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+        correlationId: { $ref: '#/components/schemas/StableId' }
+    WalkingZoneVersionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, correlationId]
+      properties:
+        data: { $ref: '#/components/schemas/WalkingZoneVersion' }
+        correlationId: { $ref: '#/components/schemas/StableId' }
+    WalkingZoneVersionListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, page, correlationId]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/WalkingZoneVersion' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+        correlationId: { $ref: '#/components/schemas/StableId' }
+    PublicationResponse:
+      type: object
+      additionalProperties: false
+      required: [publicationId, versionNumber, schemaVersion, digest, snapshotUrl, effectiveFrom, correlationId]
+      properties:
+        publicationId: { $ref: '#/components/schemas/StableId' }
+        versionNumber: { type: integer, minimum: 1 }
+        schemaVersion: { const: orderpro.walking-zones.v1 }
+        digest: { $ref: '#/components/schemas/Sha256Digest' }
+        snapshotUrl:
+          type: string
+          pattern: '^/v1/walking-zones/published/[1-9][0-9]*$'
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo:
+          oneOf: [{ type: string, format: date-time }, { type: 'null' }]
+        correlationId: { $ref: '#/components/schemas/StableId' }
+    Slot:
+      type: object
+      additionalProperties: false
+      required: [slotId, locationId, startsAt, endsAt]
+      properties:
+        slotId: { $ref: '#/components/schemas/StableId' }
+        locationId: { $ref: '#/components/schemas/StableId' }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        remainingCapacity: { type: integer, minimum: 0 }
+    SlotsResponse:
+      type: object
+      additionalProperties: false
+      required: [locationId, serviceDate, orderProZoneVersionId, slots, reasonCode, correlationId]
+      properties:
+        locationId: { $ref: '#/components/schemas/StableId' }
+        serviceDate: { type: string, format: date }
+        orderProZoneVersionId: { $ref: '#/components/schemas/StableId' }
+        slots:
+          type: array
+          items: { $ref: '#/components/schemas/Slot' }
+        reasonCode: { $ref: '#/components/schemas/ReasonCode' }
+        correlationId: { $ref: '#/components/schemas/StableId' }
+    CreateReservationRequest:
+      type: object
+      additionalProperties: false
+      required: [checkoutAttemptId, locationId, slotId, orderProZoneVersionId]
+      properties:
+        checkoutAttemptId: { $ref: '#/components/schemas/StableId' }
+        locationId: { $ref: '#/components/schemas/StableId' }
+        slotId: { $ref: '#/components/schemas/StableId' }
+        orderProZoneVersionId: { $ref: '#/components/schemas/StableId' }
+        ecommerceOrderId:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+    ReservationStatus:
+      type: string
+      enum: [HELD, CONFIRMED, RELEASED, EXPIRED]
+    Reservation:
+      type: object
+      additionalProperties: false
+      required:
+        - orderProReservationId
+        - checkoutAttemptId
+        - locationId
+        - slotId
+        - orderProZoneVersionId
+        - status
+        - expiresAt
+        - version
+        - createdAt
+        - updatedAt
+      properties:
+        orderProReservationId: { $ref: '#/components/schemas/StableId' }
+        checkoutAttemptId: { $ref: '#/components/schemas/StableId' }
+        locationId: { $ref: '#/components/schemas/StableId' }
+        slotId: { $ref: '#/components/schemas/StableId' }
+        orderProZoneVersionId: { $ref: '#/components/schemas/StableId' }
+        ecommerceOrderId:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+        squareOrderId:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+        status: { $ref: '#/components/schemas/ReservationStatus' }
+        expiresAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ReservationResponse:
+      type: object
+      additionalProperties: false
+      required: [data, correlationId]
+      properties:
+        data: { $ref: '#/components/schemas/Reservation' }
+        correlationId: { $ref: '#/components/schemas/StableId' }
+    ConfirmReservationRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, ecommerceOrderId]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        ecommerceOrderId: { $ref: '#/components/schemas/StableId' }
+        squareOrderId:
+          oneOf: [{ $ref: '#/components/schemas/StableId' }, { type: 'null' }]
+    ReleaseReservationRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reason]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message, correlationId]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 100 }
+        message: { type: string, minLength: 1, maxLength: 1000 }
+        correlationId: { $ref: '#/components/schemas/StableId' }
+        details:
+          type: array
+          items:
+            type: object
+            additionalProperties: true

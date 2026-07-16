@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateBoxCode, isValidBoxCode } from "./box-code";
+import { generateBoxCode, isValidBoxCode, normalizeBoxCode } from "./box-code";
 import { assertContainerTransition, canTransitionContainer } from "./container-state";
 import { canonicalManifest, manifestContentHash } from "./manifest";
 
@@ -11,6 +11,7 @@ describe("inventory domain", () => {
     const code = generateBoxCode();
     expect(code).toMatch(/^BX-/);
     expect(isValidBoxCode(code)).toBe(true);
+    expect(normalizeBoxCode(`  ${code.toLowerCase()}  `)).toBe(code);
     expect(isValidBoxCode(`${code.slice(0, -1)}2`)).toBe(code.endsWith("2"));
   });
 
@@ -21,8 +22,9 @@ describe("inventory domain", () => {
   });
 
   it("canonicalizes manifests before hashing", () => {
-    expect(canonicalManifest([second, first])).toEqual([first, second]);
+    expect(canonicalManifest([second, first])).toEqual([first, { ...second, quantity: "1.5" }]);
     expect(manifestContentHash([first, second])).toBe(manifestContentHash([second, first]));
+    expect(manifestContentHash([{ ...first, quantity: "2.000" }])).toBe(manifestContentHash([first]));
   });
 
   it("rejects zero or negative manifest quantities", () => {

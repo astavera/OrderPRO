@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:orderpro:schema:walking-delivery-quote:v1",
+  "title": "OrderPRO walking-delivery quote v1",
+  "description": "A server-calculated walking-delivery quote. This contract does not enable the dependency-blocked quote endpoint or approve any routing, geocoding, geometry, fee, or slot provider/configuration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "quoteId",
+    "replayed",
+    "eligible",
+    "normalizedAddress",
+    "customerCoordinates",
+    "postalCode",
+    "selectedLocationId",
+    "zoneVersionId",
+    "feePolicyVersionId",
+    "routingProvider",
+    "routingProfile",
+    "distanceFeet",
+    "durationSeconds",
+    "feeCents",
+    "tierId",
+    "reasonCode",
+    "calculatedAt",
+    "slots",
+    "correlationId"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "orderpro.walking-delivery-quote.v1"
+    },
+    "quoteId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "replayed": {
+      "type": "boolean",
+      "description": "True only when this response replays the immutable result of the same client-scoped idempotency key."
+    },
+    "eligible": {
+      "type": "boolean"
+    },
+    "normalizedAddress": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 500,
+      "description": "Provider-normalized address. Treat as customer data and redact it from ordinary logs."
+    },
+    "customerCoordinates": {
+      "$ref": "#/$defs/position"
+    },
+    "postalCode": {
+      "type": "string",
+      "pattern": "^[0-9]{5}$"
+    },
+    "selectedLocationId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "zoneVersionId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "feePolicyVersionId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "routingProvider": {
+      "$ref": "#/$defs/stableId",
+      "description": "Stable identifier for the configured server-side provider that produced the route metrics. The contract does not select that provider."
+    },
+    "routingProfile": {
+      "const": "walking"
+    },
+    "distanceFeet": {
+      "type": "number",
+      "minimum": 0,
+      "multipleOf": 0.01
+    },
+    "durationSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "feeCents": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tierId": {
+      "enum": [
+        "UP_TO_1200_FT",
+        "UP_TO_2300_FT",
+        "UP_TO_3250_FT",
+        "OVER_3250_FT_MANAGER_REVIEW"
+      ],
+      "description": "Structural distance tier retained for every quote, including manager-review outcomes."
+    },
+    "reasonCode": {
+      "enum": [
+        "ELIGIBLE",
+        "MANAGER_REVIEW",
+        "NO_AVAILABLE_SLOTS"
+      ]
+    },
+    "calculatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "slots": {
+      "type": "array",
+      "description": "Live slots for selectedLocationId only. Every item locationId must equal selectedLocationId; the service must never return another store as a fallback.",
+      "items": {
+        "$ref": "#/$defs/slot"
+      }
+    },
+    "correlationId": {
+      "$ref": "#/$defs/stableId"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "reasonCode": {
+            "const": "ELIGIBLE"
+          }
+        },
+        "required": [
+          "reasonCode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "eligible": {
+            "const": true
+          },
+          "feeCents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tierId": {
+            "enum": [
+              "UP_TO_1200_FT",
+              "UP_TO_2300_FT",
+              "UP_TO_3250_FT"
+            ]
+          },
+          "slots": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reasonCode": {
+            "const": "MANAGER_REVIEW"
+          }
+        },
+        "required": [
+          "reasonCode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "eligible": {
+            "const": false
+          },
+          "distanceFeet": {
+            "type": "number",
+            "exclusiveMinimum": 3250
+          },
+          "feeCents": {
+            "type": "null"
+          },
+          "tierId": {
+            "const": "OVER_3250_FT_MANAGER_REVIEW"
+          },
+          "slots": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reasonCode": {
+            "const": "NO_AVAILABLE_SLOTS"
+          }
+        },
+        "required": [
+          "reasonCode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "eligible": {
+            "const": false
+          },
+          "feeCents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tierId": {
+            "enum": [
+              "UP_TO_1200_FT",
+              "UP_TO_2300_FT",
+              "UP_TO_3250_FT"
+            ]
+          },
+          "slots": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "position": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slotId",
+        "locationId",
+        "startsAt",
+        "endsAt",
+        "remainingCapacity"
+      ],
+      "properties": {
+        "slotId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "locationId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "startsAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endsAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "remainingCapacity": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "schemaVersion": "orderpro.walking-delivery-quote.v1",
+      "quoteId": "quote_fixture_eligible",
+      "replayed": false,
+      "eligible": true,
+      "normalizedAddress": "100 Fixture Street, New York, NY 10075",
+      "customerCoordinates": [
+        -73.958,
+        40.773
+      ],
+      "postalCode": "10075",
+      "selectedLocationId": "store-3rd-avenue",
+      "zoneVersionId": "zonev_fixture_10075_4",
+      "feePolicyVersionId": "feepv_fixture_third_1",
+      "routingProvider": "fixture-router",
+      "routingProfile": "walking",
+      "distanceFeet": 1200,
+      "durationSeconds": 540,
+      "feeCents": 0,
+      "tierId": "UP_TO_1200_FT",
+      "reasonCode": "ELIGIBLE",
+      "calculatedAt": "2026-07-20T18:00:00Z",
+      "slots": [
+        {
+          "slotId": "slot_fixture_third_1",
+          "locationId": "store-3rd-avenue",
+          "startsAt": "2026-07-20T19:00:00Z",
+          "endsAt": "2026-07-20T19:30:00Z",
+          "remainingCapacity": 1
+        }
+      ],
+      "correlationId": "cor_fixture_quote_eligible"
+    },
+    {
+      "schemaVersion": "orderpro.walking-delivery-quote.v1",
+      "quoteId": "quote_fixture_review",
+      "replayed": false,
+      "eligible": false,
+      "normalizedAddress": "200 Fixture Street, New York, NY 10075",
+      "customerCoordinates": [
+        -73.95,
+        40.775
+      ],
+      "postalCode": "10075",
+      "selectedLocationId": "store-86th-street",
+      "zoneVersionId": "zonev_fixture_10075_4",
+      "feePolicyVersionId": "feepv_fixture_86th_1",
+      "routingProvider": "fixture-router",
+      "routingProfile": "walking",
+      "distanceFeet": 3250.01,
+      "durationSeconds": 1200,
+      "feeCents": null,
+      "tierId": "OVER_3250_FT_MANAGER_REVIEW",
+      "reasonCode": "MANAGER_REVIEW",
+      "calculatedAt": "2026-07-20T18:01:00Z",
+      "slots": [],
+      "correlationId": "cor_fixture_quote_review"
+    },
+    {
+      "schemaVersion": "orderpro.walking-delivery-quote.v1",
+      "quoteId": "quote_fixture_no_slots",
+      "replayed": false,
+      "eligible": false,
+      "normalizedAddress": "300 Fixture Street, New York, NY 10021",
+      "customerCoordinates": [
+        -73.96,
+        40.77
+      ],
+      "postalCode": "10021",
+      "selectedLocationId": "store-3rd-avenue",
+      "zoneVersionId": "zonev_fixture_10021_2",
+      "feePolicyVersionId": "feepv_fixture_third_1",
+      "routingProvider": "fixture-router",
+      "routingProfile": "walking",
+      "distanceFeet": 1760,
+      "durationSeconds": 720,
+      "feeCents": 1000,
+      "tierId": "UP_TO_2300_FT",
+      "reasonCode": "NO_AVAILABLE_SLOTS",
+      "calculatedAt": "2026-07-20T18:02:00Z",
+      "slots": [],
+      "correlationId": "cor_fixture_quote_no_slots"
+    }
+  ]
+}

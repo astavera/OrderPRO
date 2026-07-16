@@ -109,22 +109,119 @@ enum InventoryLedgerEventType {
   COUNT_LOSS
 }
 
+enum WalkingWeekday {
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+enum WalkingAssignmentStrategy {
+  FIXED
+  NEAREST_WALKING_ROUTE
+}
+
+enum WalkingServiceMode {
+  WALKING
+}
+
+enum WalkingZoneVersionStatus {
+  DRAFT
+  VALIDATED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum DeliveryPolicyStatus {
+  DRAFT
+  DRAFT_INCOMPLETE
+  VALIDATED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum FeeServiceScope {
+  GENERAL_LOCAL_DELIVERY
+  BALLOON_DELIVERY
+}
+
+enum FulfillmentMode {
+  PICKUP
+  WALKING_LOCAL_DELIVERY
+  WAREHOUSE_SHIPPING
+  STORE_RETRIEVAL_SHIPPING
+}
+
+enum WalkingPublicationStatus {
+  PUBLISHED
+  ARCHIVED
+}
+
+enum FeeCalculationStrategy {
+  WALKING_ROUTE_DISTANCE
+}
+
+enum FeePolicyEnvironment {
+  STAGING
+  PRODUCTION
+}
+
+enum WalkingQuoteReasonCode {
+  INVALID_INPUT
+  INVALID_ADDRESS
+  GEOCODING_FAILED
+  AMBIGUOUS_ADDRESS
+  OUTSIDE_WALKING_ZONE
+  NO_ACTIVE_ZONE
+  SERVICE_DAY_UNAVAILABLE
+  INVALID_ZONE_CONFIGURATION
+  STORE_NOT_AVAILABLE
+  ROUTE_METRICS_REQUIRED
+  DISTANCE_EXCEEDED
+  ROUTE_TIME_EXCEEDED
+  MINIMUM_ORDER_NOT_MET
+  FEE_POLICY_INCOMPLETE
+  SLOT_POLICY_INCOMPLETE
+  NO_AVAILABLE_SLOTS
+  ELIGIBLE
+  MANAGER_REVIEW
+}
+
 model OperationalLocation {
-  id              String                  @id @default(uuid()) @db.Uuid
-  code            String                  @unique @db.VarChar(8)
-  name            String
-  type            LocationType
-  active          Boolean                 @default(true)
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  squareMappings  SquareLocationMapping[]
-  userGrants      UserLocationGrant[]
-  ownedLots       InventoryLot[]          @relation("LotOwner")
-  ownedContainers Container[]             @relation("ContainerOwner")
-  storageAreas    StorageLocation[]
-  containers      Container[]             @relation("ContainerCurrentLocation")
-  ledgerFrom      InventoryLedgerEntry[]  @relation("LedgerFromLocation")
-  ledgerTo        InventoryLedgerEntry[]  @relation("LedgerToLocation")
+  id                           String                         @id @default(uuid()) @db.Uuid
+  code                         String                         @unique @db.VarChar(8)
+  publicId                     String?                        @unique(map: "OperationalLocation_publicId_key") @db.VarChar(64)
+  name                         String
+  type                         LocationType
+  active                       Boolean                        @default(true)
+  addressLine1                 String?
+  addressLine2                 String?
+  city                         String?
+  regionCode                   String?                        @db.VarChar(2)
+  postalCode                   String?                        @db.VarChar(10)
+  countryCode                  String?                        @db.Char(2)
+  timeZone                     String?                        @db.VarChar(64)
+  latitude                     Decimal?                       @db.Decimal(9, 6)
+  longitude                    Decimal?                       @db.Decimal(9, 6)
+  createdAt                    DateTime                       @default(now())
+  updatedAt                    DateTime                       @updatedAt
+  squareMappings               SquareLocationMapping[]
+  userGrants                   UserLocationGrant[]
+  ownedLots                    InventoryLot[]                 @relation("LotOwner")
+  ownedContainers              Container[]                    @relation("ContainerOwner")
+  storageAreas                 StorageLocation[]
+  containers                   Container[]                    @relation("ContainerCurrentLocation")
+  ledgerFrom                   InventoryLedgerEntry[]         @relation("LedgerFromLocation")
+  ledgerTo                     InventoryLedgerEntry[]         @relation("LedgerToLocation")
+  walkingZoneCandidates        WalkingZoneCandidate[]
+  feePolicies                  FeePolicy[]
+  slotPolicies                 SlotPolicy[]
+  storeOnlineSourcePolicies    StoreOnlineFulfillmentPolicy[] @relation("StoreOnlineSource")
+  storeOnlineConsolidationHubs StoreOnlineFulfillmentPolicy[] @relation("StoreOnlineConsolidation")
+  walkingDeliveryQuotes        WalkingDeliveryQuote[]         @relation("WalkingQuoteSelectedLocation")
 }
 
 model SquareLocationMapping {
@@ -142,16 +239,32 @@ model SquareLocationMapping {
 }
 
 model User {
-  id          String              @id @default(uuid()) @db.Uuid
-  subject     String              @unique @db.Uuid
-  email       String              @unique
-  displayName String
-  active      Boolean             @default(true)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  roles       UserRole[]
-  locations   UserLocationGrant[]
-  auditEvents AuditEvent[]
+  id                                  String                            @id @default(uuid()) @db.Uuid
+  subject                             String                            @unique @db.Uuid
+  email                               String                            @unique
+  displayName                         String
+  active                              Boolean                           @default(true)
+  version                             Int                               @default(1)
+  createdAt                           DateTime                          @default(now())
+  updatedAt                           DateTime                          @updatedAt
+  roles                               UserRole[]
+  locations                           UserLocationGrant[]
+  auditEvents                         AuditEvent[]
+  walkingZonesCreated                 WalkingZone[]                     @relation("WalkingZoneCreatedBy")
+  walkingZoneVersionsCreated          WalkingZoneVersion[]              @relation("WalkingZoneVersionCreatedBy")
+  walkingZoneVersionsPublished        WalkingZoneVersion[]              @relation("WalkingZoneVersionPublishedBy")
+  feePoliciesCreated                  FeePolicy[]                       @relation("FeePolicyCreatedBy")
+  feePoliciesPublished                FeePolicy[]                       @relation("FeePolicyPublishedBy")
+  slotPoliciesCreated                 SlotPolicy[]                      @relation("SlotPolicyCreatedBy")
+  slotPoliciesPublished               SlotPolicy[]                      @relation("SlotPolicyPublishedBy")
+  storeOnlinePoliciesCreated          StoreOnlineFulfillmentPolicy[]    @relation("StoreOnlinePolicyCreatedBy")
+  storeOnlinePoliciesPublished        StoreOnlineFulfillmentPolicy[]    @relation("StoreOnlinePolicyPublishedBy")
+  walkingPublicationsPublished        WalkingPublication[]              @relation("WalkingPublicationPublishedBy")
+  feeCalculationPoliciesCreated       FeeCalculationPolicy[]            @relation("FeeCalculationPolicyCreatedBy")
+  feeCalculationVersionsCreated       FeeCalculationPolicyVersion[]     @relation("FeeCalculationVersionCreatedBy")
+  feeCalculationVersionsPublished     FeeCalculationPolicyVersion[]     @relation("FeeCalculationVersionPublishedBy")
+  feeCalculationPublicationsPublished FeeCalculationPolicyPublication[] @relation("FeeCalculationPublicationPublishedBy")
+  walkingDeliveryQuotesCreated        WalkingDeliveryQuote[]            @relation("WalkingQuoteCreatedBy")
 }
 
 model UserRole {
@@ -430,4 +543,337 @@ model ContainerContentProjection {
 
   @@id([containerId, inventoryLotId])
   @@index([productId])
+}
+
+model StoreOnlineFulfillmentPolicy {
+  id                                String               @id @default(uuid()) @db.Uuid
+  policyKey                         String               @db.VarChar(80)
+  versionNumber                     Int
+  sourceLocationId                  String               @db.Uuid
+  consolidationLocationId           String               @db.Uuid
+  status                            DeliveryPolicyStatus @default(DRAFT_INCOMPLETE)
+  fulfillmentMode                   FulfillmentMode      @default(STORE_RETRIEVAL_SHIPPING)
+  onlineSalesEnabled                Boolean              @default(false)
+  availableOnlyAfterStoreActivation Boolean              @default(true)
+  addedBusinessDays                 Int                  @default(2)
+  timeZone                          String               @db.VarChar(64)
+  pickupWeekdays                    WalkingWeekday[]
+  retrievalCutoffMinuteOfDay        Int?
+  businessCalendarRef               String?              @db.VarChar(120)
+  effectiveFrom                     DateTime?
+  effectiveTo                       DateTime?
+  digest                            String?              @db.VarChar(80)
+  createdById                       String?              @db.Uuid
+  publishedById                     String?              @db.Uuid
+  publishedAt                       DateTime?
+  createdAt                         DateTime             @default(now())
+  updatedAt                         DateTime             @updatedAt
+  sourceLocation                    OperationalLocation  @relation("StoreOnlineSource", fields: [sourceLocationId], references: [id], onDelete: Restrict, map: "StoreOnlinePolicy_source_location_fkey")
+  consolidationLocation             OperationalLocation  @relation("StoreOnlineConsolidation", fields: [consolidationLocationId], references: [id], onDelete: Restrict, map: "StoreOnlinePolicy_consolidation_location_fkey")
+  createdBy                         User?                @relation("StoreOnlinePolicyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, map: "StoreOnlinePolicy_created_by_fkey")
+  publishedBy                       User?                @relation("StoreOnlinePolicyPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull, map: "StoreOnlinePolicy_published_by_fkey")
+
+  @@unique([policyKey, versionNumber], map: "StoreOnlinePolicy_key_version_key")
+  @@index([sourceLocationId, status, effectiveFrom], map: "StoreOnlinePolicy_source_status_idx")
+  @@index([consolidationLocationId, status], map: "StoreOnlinePolicy_hub_status_idx")
+}
+
+model FeePolicy {
+  id                         String                       @id @default(uuid()) @db.Uuid
+  policyKey                  String                       @db.VarChar(80)
+  versionNumber              Int
+  locationId                 String                       @db.Uuid
+  name                       String
+  serviceScope               FeeServiceScope
+  status                     DeliveryPolicyStatus         @default(DRAFT_INCOMPLETE)
+  currency                   String                       @default("USD") @db.Char(3)
+  baseFeeCents               Int?
+  rateRules                  Json?
+  exceptions                 Json?
+  activeDays                 WalkingWeekday[]
+  effectiveFrom              DateTime?
+  effectiveTo                DateTime?
+  digest                     String?                      @db.VarChar(80)
+  calculationPolicyVersionId String?                      @db.Uuid
+  createdById                String?                      @db.Uuid
+  publishedById              String?                      @db.Uuid
+  publishedAt                DateTime?
+  createdAt                  DateTime                     @default(now())
+  updatedAt                  DateTime                     @updatedAt
+  location                   OperationalLocation          @relation(fields: [locationId], references: [id], onDelete: Restrict, map: "FeePolicy_location_fkey")
+  createdBy                  User?                        @relation("FeePolicyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, map: "FeePolicy_created_by_fkey")
+  publishedBy                User?                        @relation("FeePolicyPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull, map: "FeePolicy_published_by_fkey")
+  calculationPolicyVersion   FeeCalculationPolicyVersion? @relation(fields: [calculationPolicyVersionId], references: [id], onDelete: Restrict, map: "FeePolicy_calculation_version_fkey")
+  zoneCandidates             WalkingZoneCandidate[]
+
+  @@unique([policyKey, versionNumber], map: "FeePolicy_key_version_key")
+  @@index([locationId, serviceScope, status, effectiveFrom], map: "FeePolicy_location_scope_status_idx")
+  @@index([calculationPolicyVersionId], map: "FeePolicy_calculation_version_idx")
+}
+
+model SlotPolicy {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  policyKey             String                 @db.VarChar(80)
+  versionNumber         Int
+  locationId            String                 @db.Uuid
+  name                  String
+  fulfillmentMode       FulfillmentMode        @default(WALKING_LOCAL_DELIVERY)
+  status                DeliveryPolicyStatus   @default(DRAFT_INCOMPLETE)
+  activeDays            WalkingWeekday[]
+  leadTimeMinutes       Int?
+  cutoffMinuteOfDay     Int?
+  capacityPolicyRef     String?                @db.VarChar(120)
+  effectiveFrom         DateTime?
+  effectiveTo           DateTime?
+  digest                String?                @db.VarChar(80)
+  createdById           String?                @db.Uuid
+  publishedById         String?                @db.Uuid
+  publishedAt           DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  location              OperationalLocation    @relation(fields: [locationId], references: [id], onDelete: Restrict, map: "SlotPolicy_location_fkey")
+  createdBy             User?                  @relation("SlotPolicyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, map: "SlotPolicy_created_by_fkey")
+  publishedBy           User?                  @relation("SlotPolicyPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull, map: "SlotPolicy_published_by_fkey")
+  zoneCandidates        WalkingZoneCandidate[]
+  walkingDeliveryQuotes WalkingDeliveryQuote[]
+
+  @@unique([policyKey, versionNumber], map: "SlotPolicy_key_version_key")
+  @@index([locationId, fulfillmentMode, status, effectiveFrom], map: "SlotPolicy_location_mode_status_idx")
+}
+
+model WalkingZone {
+  id                   String               @id @default(uuid()) @db.Uuid
+  slug                 String               @unique(map: "WalkingZone_slug_key") @db.VarChar(80)
+  name                 String
+  currentVersionNumber Int                  @default(0)
+  createdById          String?              @db.Uuid
+  archivedAt           DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  createdBy            User?                @relation("WalkingZoneCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, map: "WalkingZone_created_by_fkey")
+  versions             WalkingZoneVersion[]
+
+  @@index([archivedAt, updatedAt], map: "WalkingZone_archive_updated_idx")
+}
+
+model WalkingZoneVersion {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  walkingZoneId         String                    @db.Uuid
+  versionNumber         Int
+  revision              Int                       @default(1)
+  status                WalkingZoneVersionStatus  @default(DRAFT)
+  serviceMode           WalkingServiceMode        @default(WALKING)
+  assignmentStrategy    WalkingAssignmentStrategy
+  postalCodes           String[]
+  priority              Int?
+  geometry              Json?
+  activeDays            WalkingWeekday[]
+  maxDistanceMiles      Decimal?                  @db.Decimal(8, 3)
+  maxRouteMinutes       Int?
+  minimumOrderCents     Int?
+  snapshot              Json?
+  digest                String?                   @db.VarChar(80)
+  effectiveFrom         DateTime?
+  effectiveTo           DateTime?
+  rollbackOfVersionId   String?                   @db.Uuid
+  createdById           String?                   @db.Uuid
+  publishedById         String?                   @db.Uuid
+  validatedAt           DateTime?
+  publishedAt           DateTime?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  walkingZone           WalkingZone               @relation(fields: [walkingZoneId], references: [id], onDelete: Restrict, map: "WalkingZoneVersion_zone_fkey")
+  rollbackOf            WalkingZoneVersion?       @relation("WalkingZoneVersionRollback", fields: [rollbackOfVersionId], references: [id], onDelete: Restrict, map: "WalkingZoneVersion_rollback_fkey")
+  rolledBackBy          WalkingZoneVersion[]      @relation("WalkingZoneVersionRollback")
+  createdBy             User?                     @relation("WalkingZoneVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, map: "WalkingZoneVersion_created_by_fkey")
+  publishedBy           User?                     @relation("WalkingZoneVersionPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull, map: "WalkingZoneVersion_published_by_fkey")
+  candidates            WalkingZoneCandidate[]
+  walkingDeliveryQuotes WalkingDeliveryQuote[]
+
+  @@unique([walkingZoneId, versionNumber], map: "WalkingZoneVersion_zone_version_key")
+  @@index([status, effectiveFrom, effectiveTo], map: "WalkingZoneVersion_status_effective_idx")
+  @@index([digest], map: "WalkingZoneVersion_digest_idx")
+}
+
+model WalkingZoneCandidate {
+  walkingZoneVersionId String              @db.Uuid
+  locationId           String              @db.Uuid
+  feePolicyId          String?             @db.Uuid
+  slotPolicyId         String?             @db.Uuid
+  createdAt            DateTime            @default(now())
+  walkingZoneVersion   WalkingZoneVersion  @relation(fields: [walkingZoneVersionId], references: [id], onDelete: Restrict, map: "WalkingZoneCandidate_version_fkey")
+  location             OperationalLocation @relation(fields: [locationId], references: [id], onDelete: Restrict, map: "WalkingZoneCandidate_location_fkey")
+  feePolicy            FeePolicy?          @relation(fields: [feePolicyId], references: [id], onDelete: Restrict, map: "WalkingZoneCandidate_fee_policy_fkey")
+  slotPolicy           SlotPolicy?         @relation(fields: [slotPolicyId], references: [id], onDelete: Restrict, map: "WalkingZoneCandidate_slot_policy_fkey")
+
+  @@id([walkingZoneVersionId, locationId], map: "WalkingZoneCandidate_pkey")
+  @@index([locationId, walkingZoneVersionId], map: "WalkingZoneCandidate_location_version_idx")
+  @@index([feePolicyId], map: "WalkingZoneCandidate_fee_policy_idx")
+  @@index([slotPolicyId], map: "WalkingZoneCandidate_slot_policy_idx")
+}
+
+model WalkingPublication {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  versionNumber           Int                      @unique(map: "WalkingPublication_version_key")
+  schemaVersion           String                   @default("orderpro.walking-zones.v1") @db.VarChar(80)
+  status                  WalkingPublicationStatus @default(PUBLISHED)
+  snapshot                Json
+  digest                  String                   @db.VarChar(80)
+  effectiveFrom           DateTime
+  effectiveTo             DateTime?
+  rollbackOfPublicationId String?                  @db.Uuid
+  publishedById           String?                  @db.Uuid
+  publishedAt             DateTime                 @default(now())
+  createdAt               DateTime                 @default(now())
+  rollbackOf              WalkingPublication?      @relation("WalkingPublicationRollback", fields: [rollbackOfPublicationId], references: [id], onDelete: Restrict, map: "WalkingPublication_rollback_fkey")
+  rolledBackBy            WalkingPublication[]     @relation("WalkingPublicationRollback")
+  publishedBy             User?                    @relation("WalkingPublicationPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull, map: "WalkingPublication_published_by_fkey")
+  walkingDeliveryQuotes   WalkingDeliveryQuote[]
+
+  @@index([status, effectiveFrom, effectiveTo], map: "WalkingPublication_status_effective_idx")
+  @@index([digest], map: "WalkingPublication_digest_idx")
+}
+
+model FeeCalculationPolicy {
+  id           String                            @id @default(uuid()) @db.Uuid
+  code         String                            @unique(map: "FeeCalculationPolicy_code_key") @db.VarChar(80)
+  name         String
+  createdById  String?                           @db.Uuid
+  createdAt    DateTime                          @default(now())
+  updatedAt    DateTime                          @updatedAt
+  createdBy    User?                             @relation("FeeCalculationPolicyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, map: "FeeCalculationPolicy_created_by_fkey")
+  versions     FeeCalculationPolicyVersion[]
+  publications FeeCalculationPolicyPublication[]
+
+  @@index([updatedAt], map: "FeeCalculationPolicy_updated_idx")
+}
+
+model FeeCalculationPolicyVersion {
+  id                     String                            @id @default(uuid()) @db.Uuid
+  feeCalculationPolicyId String                            @db.Uuid
+  versionKey             String                            @db.VarChar(80)
+  versionNumber          Int
+  revision               Int                               @default(1)
+  status                 DeliveryPolicyStatus              @default(DRAFT)
+  environment            FeePolicyEnvironment              @default(STAGING)
+  strategy               FeeCalculationStrategy            @default(WALKING_ROUTE_DISTANCE)
+  currency               String                            @default("USD") @db.Char(3)
+  routingProfile         String                            @default("walking") @db.VarChar(32)
+  snapshot               Json?
+  digest                 String?                           @db.VarChar(80)
+  effectiveFrom          DateTime?
+  effectiveTo            DateTime?
+  createdById            String?                           @db.Uuid
+  publishedById          String?                           @db.Uuid
+  validatedAt            DateTime?
+  publishedAt            DateTime?
+  createdAt              DateTime                          @default(now())
+  updatedAt              DateTime                          @updatedAt
+  feeCalculationPolicy   FeeCalculationPolicy              @relation(fields: [feeCalculationPolicyId], references: [id], onDelete: Restrict, map: "FeeCalculationVersion_policy_fkey")
+  createdBy              User?                             @relation("FeeCalculationVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, map: "FeeCalculationVersion_created_by_fkey")
+  publishedBy            User?                             @relation("FeeCalculationVersionPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict, map: "FeeCalculationVersion_published_by_fkey")
+  tiers                  FeeCalculationTier[]
+  locationFeePolicies    FeePolicy[]
+  quotes                 WalkingDeliveryQuote[]
+  publications           FeeCalculationPolicyPublication[]
+
+  @@unique([feeCalculationPolicyId, versionNumber], map: "FeeCalculationVersion_policy_number_key")
+  @@unique([feeCalculationPolicyId, versionKey], map: "FeeCalculationVersion_policy_key_key")
+  @@index([status, environment, effectiveFrom], map: "FeeCalculationVersion_status_environment_idx")
+  @@index([digest], map: "FeeCalculationVersion_digest_idx")
+}
+
+model FeeCalculationTier {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  feePolicyVersionId String                      @db.Uuid
+  tierKey            String                      @db.VarChar(80)
+  sequence           Int
+  lowerExclusiveFeet Decimal?                    @db.Decimal(12, 2)
+  upperInclusiveFeet Decimal?                    @db.Decimal(12, 2)
+  feeCents           Int?
+  automatic          Boolean
+  reasonCode         WalkingQuoteReasonCode
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  feePolicyVersion   FeeCalculationPolicyVersion @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict, map: "FeeCalculationTier_version_fkey")
+  quotes             WalkingDeliveryQuote[]
+
+  @@unique([feePolicyVersionId, tierKey], map: "FeeCalculationTier_version_key_key")
+  @@unique([feePolicyVersionId, sequence], map: "FeeCalculationTier_version_sequence_key")
+  @@index([feePolicyVersionId, lowerExclusiveFeet, upperInclusiveFeet], map: "FeeCalculationTier_bounds_idx")
+}
+
+model FeeCalculationPolicyPublication {
+  id                      String                            @id @default(uuid()) @db.Uuid
+  feeCalculationPolicyId  String                            @db.Uuid
+  feePolicyVersionId      String                            @db.Uuid
+  publicationNumber       Int
+  schemaVersion           String                            @default("orderpro.walking-route-distance-fee.v1") @db.VarChar(100)
+  status                  WalkingPublicationStatus          @default(PUBLISHED)
+  snapshot                Json
+  digest                  String                            @db.VarChar(80)
+  effectiveFrom           DateTime
+  effectiveTo             DateTime?
+  rollbackOfPublicationId String?                           @db.Uuid
+  publishedById           String?                           @db.Uuid
+  publishedAt             DateTime                          @default(now())
+  createdAt               DateTime                          @default(now())
+  feeCalculationPolicy    FeeCalculationPolicy              @relation(fields: [feeCalculationPolicyId], references: [id], onDelete: Restrict, map: "FeeCalculationPublication_policy_fkey")
+  feePolicyVersion        FeeCalculationPolicyVersion       @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict, map: "FeeCalculationPublication_version_fkey")
+  rollbackOf              FeeCalculationPolicyPublication?  @relation("FeeCalculationPublicationRollback", fields: [rollbackOfPublicationId], references: [id], onDelete: Restrict, map: "FeeCalculationPublication_rollback_fkey")
+  rolledBackBy            FeeCalculationPolicyPublication[] @relation("FeeCalculationPublicationRollback")
+  publishedBy             User?                             @relation("FeeCalculationPublicationPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict, map: "FeeCalculationPublication_published_by_fkey")
+
+  @@unique([feeCalculationPolicyId, publicationNumber], map: "FeeCalculationPublication_policy_number_key")
+  @@index([feePolicyVersionId], map: "FeeCalculationPublication_version_idx")
+  @@index([status, effectiveFrom, effectiveTo], map: "FeeCalculationPublication_status_effective_idx")
+  @@index([digest], map: "FeeCalculationPublication_digest_idx")
+}
+
+model WalkingDeliveryQuote {
+  id                            String                       @id @default(uuid()) @db.Uuid
+  schemaVersion                 String                       @default("orderpro.walking-delivery-quote.v1") @db.VarChar(100)
+  clientId                      String                       @db.VarChar(120)
+  idempotencyKey                String                       @db.VarChar(160)
+  requestHash                   String                       @db.VarChar(80)
+  normalizedAddress             String?
+  customerCoordinates           Json?
+  postalCode                    String?                      @db.VarChar(10)
+  selectedLocationId            String?                      @db.VarChar(64)
+  selectedOperationalLocationId String?                      @db.Uuid
+  zoneVersionId                 String?                      @db.Uuid
+  feePolicyVersionId            String?                      @db.Uuid
+  routingProvider               String?                      @db.VarChar(80)
+  routingProfile                String                       @default("walking") @db.VarChar(32)
+  distanceFeet                  Decimal?                     @db.Decimal(12, 2)
+  durationSeconds               Int?
+  feeCents                      Int?
+  tierId                        String?                      @db.Uuid
+  reasonCode                    WalkingQuoteReasonCode
+  calculatedAt                  DateTime
+  feePolicySnapshot             Json?
+  tierSnapshot                  Json?
+  slotPolicyId                  String?                      @db.Uuid
+  slotSnapshot                  Json?
+  walkingPublicationId          String?                      @db.Uuid
+  correlationId                 String                       @db.VarChar(120)
+  createdById                   String?                      @db.Uuid
+  createdAt                     DateTime                     @default(now())
+  selectedOperationalLocation   OperationalLocation?         @relation("WalkingQuoteSelectedLocation", fields: [selectedOperationalLocationId], references: [id], onDelete: Restrict, map: "WalkingDeliveryQuote_location_fkey")
+  zoneVersion                   WalkingZoneVersion?          @relation(fields: [zoneVersionId], references: [id], onDelete: Restrict, map: "WalkingDeliveryQuote_zone_version_fkey")
+  feePolicyVersion              FeeCalculationPolicyVersion? @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict, map: "WalkingDeliveryQuote_fee_version_fkey")
+  tier                          FeeCalculationTier?          @relation(fields: [tierId], references: [id], onDelete: Restrict, map: "WalkingDeliveryQuote_tier_fkey")
+  slotPolicy                    SlotPolicy?                  @relation(fields: [slotPolicyId], references: [id], onDelete: Restrict, map: "WalkingDeliveryQuote_slot_policy_fkey")
+  walkingPublication            WalkingPublication?          @relation(fields: [walkingPublicationId], references: [id], onDelete: Restrict, map: "WalkingDeliveryQuote_publication_fkey")
+  createdBy                     User?                        @relation("WalkingQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, map: "WalkingDeliveryQuote_created_by_fkey")
+
+  @@unique([clientId, idempotencyKey], map: "WalkingDeliveryQuote_client_idempotency_key")
+  @@index([selectedLocationId, calculatedAt], map: "WalkingDeliveryQuote_location_calculated_idx")
+  @@index([selectedOperationalLocationId], map: "WalkingDeliveryQuote_operational_location_idx")
+  @@index([zoneVersionId, calculatedAt], map: "WalkingDeliveryQuote_zone_calculated_idx")
+  @@index([feePolicyVersionId, calculatedAt], map: "WalkingDeliveryQuote_fee_version_calculated_idx")
+  @@index([postalCode, calculatedAt], map: "WalkingDeliveryQuote_postal_calculated_idx")
+  @@index([reasonCode, calculatedAt], map: "WalkingDeliveryQuote_reason_calculated_idx")
+  @@index([correlationId], map: "WalkingDeliveryQuote_correlation_idx")
+  @@index([requestHash], map: "WalkingDeliveryQuote_request_hash_idx")
 }
