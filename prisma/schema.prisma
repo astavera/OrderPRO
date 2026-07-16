@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum LocationType {
@@ -31,131 +32,402 @@ enum MessageStatus {
   DEAD_LETTER
 }
 
+enum ProductIdentifierType {
+  UPC
+  SKU
+  GTIN
+  INTERNAL
+}
+
+enum ContainerType {
+  BOX
+  ACTIVE_PICK_BIN
+  TOTE
+}
+
+enum ContainerStatus {
+  OPEN
+  MANIFEST_CLOSED
+  SEALED
+  STAGED
+  IN_TRANSIT
+  RECEIVED_PENDING_VERIFICATION
+  RECEIVED
+  PUTAWAY
+  ACTIVE
+  QUARANTINED
+  DAMAGED
+  LOST
+  EMPTY
+  ARCHIVED
+}
+
+enum ManifestStatus {
+  DRAFT
+  CLOSED
+  SUPERSEDED
+}
+
+enum SealAction {
+  APPLIED
+  BROKEN
+}
+
+enum InventoryAvailabilityState {
+  UNAVAILABLE
+  STAGED
+  IN_TRANSIT
+  RECEIVED_PENDING_ACTIVATION
+  AVAILABLE_ONLINE
+  RESERVED
+  ALLOCATED
+  PICKED
+  SOLD
+  QUARANTINED
+  RETURN_STAGED
+}
+
+enum InventoryLedgerEventType {
+  OPENING_BALANCE
+  PACK_ACCEPTED
+  PACK_CORRECTED
+  STAGED
+  DISPATCHED
+  RECEIVED
+  QUARANTINED
+  PUTAWAY
+  ACTIVATED
+  DEACTIVATED
+  MOVED
+  RESERVED
+  RESERVATION_RELEASED
+  ALLOCATED
+  PICKED
+  SHORTAGE
+  RETURNED
+  COUNT_GAIN
+  COUNT_LOSS
+}
+
 model OperationalLocation {
-  id             String @id @default(uuid()) @db.Uuid
-  code           String @unique @db.VarChar(8)
-  name           String
-  type           LocationType
-  active         Boolean @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  squareMappings SquareLocationMapping[]
-  userGrants     UserLocationGrant[]
+  id              String                  @id @default(uuid()) @db.Uuid
+  code            String                  @unique @db.VarChar(8)
+  name            String
+  type            LocationType
+  active          Boolean                 @default(true)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  squareMappings  SquareLocationMapping[]
+  userGrants      UserLocationGrant[]
+  ownedLots       InventoryLot[]          @relation("LotOwner")
+  ownedContainers Container[]             @relation("ContainerOwner")
+  storageAreas    StorageLocation[]
+  containers      Container[]             @relation("ContainerCurrentLocation")
+  ledgerFrom      InventoryLedgerEntry[]  @relation("LedgerFromLocation")
+  ledgerTo        InventoryLedgerEntry[]  @relation("LedgerToLocation")
 }
 
 model SquareLocationMapping {
-  id                    String @id @default(uuid()) @db.Uuid
-  operationalLocationId String @db.Uuid
+  id                    String              @id @default(uuid()) @db.Uuid
+  operationalLocationId String              @db.Uuid
   squareLocationId      String
   effectiveFrom         DateTime
   effectiveTo           DateTime?
-  verifiedByUserId      String? @db.Uuid
-  createdAt             DateTime @default(now())
+  verifiedByUserId      String?             @db.Uuid
+  createdAt             DateTime            @default(now())
   operationalLocation   OperationalLocation @relation(fields: [operationalLocationId], references: [id], onDelete: Restrict)
+
   @@unique([squareLocationId, effectiveFrom])
   @@index([operationalLocationId, effectiveFrom])
 }
 
 model User {
-  id          String @id @default(uuid()) @db.Uuid
-  subject     String @unique
-  email       String @unique
+  id          String              @id @default(uuid()) @db.Uuid
+  subject     String              @unique @db.Uuid
+  email       String              @unique
   displayName String
-  active      Boolean @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  active      Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
   roles       UserRole[]
   locations   UserLocationGrant[]
   auditEvents AuditEvent[]
 }
 
 model UserRole {
-  userId String @db.Uuid
-  role RoleCode
+  userId    String   @db.Uuid
+  role      RoleCode
   createdAt DateTime @default(now())
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@id([userId, role])
 }
 
 model UserLocationGrant {
-  userId String @db.Uuid
-  locationId String @db.Uuid
-  createdAt DateTime @default(now())
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  location OperationalLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  userId     String              @db.Uuid
+  locationId String              @db.Uuid
+  createdAt  DateTime            @default(now())
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location   OperationalLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
   @@id([userId, locationId])
 }
 
 model IdempotencyRecord {
-  id String @id @default(uuid()) @db.Uuid
-  scope String
-  key String
-  requestHash String
+  id             String    @id @default(uuid()) @db.Uuid
+  scope          String
+  key            String
+  requestHash    String
   responseStatus Int?
-  responseBody Json?
-  lockedUntil DateTime?
-  completedAt DateTime?
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  responseBody   Json?
+  lockedUntil    DateTime?
+  completedAt    DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+
   @@unique([scope, key])
   @@index([expiresAt])
 }
 
 model WebhookInbox {
-  id String @id @default(uuid()) @db.Uuid
-  provider String
-  externalId String
-  eventType String
-  payload Json
-  payloadHash String
-  status MessageStatus @default(PENDING)
-  attemptCount Int @default(0)
-  nextAttemptAt DateTime @default(now())
-  processedAt DateTime?
+  id            String        @id @default(uuid()) @db.Uuid
+  provider      String
+  externalId    String
+  eventType     String
+  payload       Json
+  payloadHash   String
+  status        MessageStatus @default(PENDING)
+  attemptCount  Int           @default(0)
+  nextAttemptAt DateTime      @default(now())
+  processedAt   DateTime?
   lastErrorCode String?
-  receivedAt DateTime @default(now())
+  receivedAt    DateTime      @default(now())
+
   @@unique([provider, externalId])
   @@index([status, nextAttemptAt])
 }
 
 model OutboxMessage {
-  id String @id @default(uuid()) @db.Uuid
-  topic String
+  id            String        @id @default(uuid()) @db.Uuid
+  topic         String
   aggregateType String
-  aggregateId String
-  payload Json
-  status MessageStatus @default(PENDING)
-  attemptCount Int @default(0)
-  nextAttemptAt DateTime @default(now())
-  processedAt DateTime?
+  aggregateId   String
+  payload       Json
+  status        MessageStatus @default(PENDING)
+  attemptCount  Int           @default(0)
+  nextAttemptAt DateTime      @default(now())
+  processedAt   DateTime?
   lastErrorCode String?
-  createdAt DateTime @default(now())
+  createdAt     DateTime      @default(now())
+
   @@index([status, nextAttemptAt])
   @@index([aggregateType, aggregateId])
 }
 
 model FeatureFlag {
-  key String @id
-  enabled Boolean @default(false)
+  key         String   @id
+  enabled     Boolean  @default(false)
   description String
-  rules Json?
-  updatedAt DateTime @updatedAt
+  rules       Json?
+  updatedAt   DateTime @updatedAt
 }
 
 model AuditEvent {
-  id String @id @default(uuid()) @db.Uuid
-  actorId String? @db.Uuid
-  action String
-  entityType String
-  entityId String?
-  locationCode String?
+  id            String   @id @default(uuid()) @db.Uuid
+  actorId       String?  @db.Uuid
+  action        String
+  entityType    String
+  entityId      String?
+  locationCode  String?
   correlationId String
-  reason String?
-  before Json?
-  after Json?
-  occurredAt DateTime @default(now())
-  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  reason        String?
+  before        Json?
+  after         Json?
+  occurredAt    DateTime @default(now())
+  actor         User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
   @@index([entityType, entityId, occurredAt])
   @@index([actorId, occurredAt])
   @@index([correlationId])
+}
+
+model Product {
+  id                String                       @id @default(uuid()) @db.Uuid
+  squareVariationId String                       @unique
+  displayName       String
+  active            Boolean                      @default(true)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  identifiers       ProductIdentifier[]
+  lots              InventoryLot[]
+  manifestLines     ManifestLine[]
+  ledgerEntries     InventoryLedgerEntry[]
+  containerBalances ContainerContentProjection[]
+}
+
+model ProductIdentifier {
+  id              String                @id @default(uuid()) @db.Uuid
+  productId       String                @db.Uuid
+  type            ProductIdentifierType
+  normalizedValue String
+  active          Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  product         Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([type, normalizedValue])
+  @@index([productId])
+}
+
+model StorageLocation {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  operationalLocationId String                 @db.Uuid
+  code                  String
+  name                  String
+  active                Boolean                @default(true)
+  pickSequence          Int?
+  maxContainerCount     Int?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  operationalLocation   OperationalLocation    @relation(fields: [operationalLocationId], references: [id], onDelete: Restrict)
+  containers            Container[]
+  ledgerFrom            InventoryLedgerEntry[] @relation("LedgerFromStorage")
+  ledgerTo              InventoryLedgerEntry[] @relation("LedgerToStorage")
+
+  @@unique([operationalLocationId, code])
+  @@index([operationalLocationId, active])
+}
+
+model InventoryLot {
+  id                String                       @id @default(uuid()) @db.Uuid
+  productId         String                       @db.Uuid
+  ownerLocationId   String                       @db.Uuid
+  sourceReference   String?
+  seasonCode        String?
+  receivedAt        DateTime?
+  createdAt         DateTime                     @default(now())
+  product           Product                      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  ownerLocation     OperationalLocation          @relation("LotOwner", fields: [ownerLocationId], references: [id], onDelete: Restrict)
+  manifestLines     ManifestLine[]
+  ledgerEntries     InventoryLedgerEntry[]
+  containerBalances ContainerContentProjection[]
+
+  @@index([productId, ownerLocationId])
+  @@index([ownerLocationId, seasonCode])
+}
+
+model Container {
+  id                String                       @id @default(uuid()) @db.Uuid
+  code              String                       @unique @db.VarChar(16)
+  type              ContainerType
+  status            ContainerStatus              @default(OPEN)
+  ownerLocationId   String                       @db.Uuid
+  currentLocationId String                       @db.Uuid
+  storageLocationId String?                      @db.Uuid
+  version           Int                          @default(1)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  ownerLocation     OperationalLocation          @relation("ContainerOwner", fields: [ownerLocationId], references: [id], onDelete: Restrict)
+  currentLocation   OperationalLocation          @relation("ContainerCurrentLocation", fields: [currentLocationId], references: [id], onDelete: Restrict)
+  storageLocation   StorageLocation?             @relation(fields: [storageLocationId], references: [id], onDelete: Restrict)
+  manifests         ManifestVersion[]
+  sealEvents        SealEvent[]
+  ledgerEntries     InventoryLedgerEntry[]
+  contentProjection ContainerContentProjection[]
+
+  @@index([ownerLocationId, status])
+  @@index([currentLocationId, storageLocationId, status])
+}
+
+model ManifestVersion {
+  id          String         @id @default(uuid()) @db.Uuid
+  containerId String         @db.Uuid
+  version     Int
+  status      ManifestStatus @default(DRAFT)
+  contentHash String?
+  closedAt    DateTime?
+  createdAt   DateTime       @default(now())
+  container   Container      @relation(fields: [containerId], references: [id], onDelete: Restrict)
+  lines       ManifestLine[]
+
+  @@unique([containerId, version])
+  @@index([containerId, status])
+}
+
+model ManifestLine {
+  id                String          @id @default(uuid()) @db.Uuid
+  manifestVersionId String          @db.Uuid
+  productId         String          @db.Uuid
+  inventoryLotId    String          @db.Uuid
+  quantity          Decimal         @db.Decimal(18, 3)
+  createdAt         DateTime        @default(now())
+  manifestVersion   ManifestVersion @relation(fields: [manifestVersionId], references: [id], onDelete: Restrict)
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  inventoryLot      InventoryLot    @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict)
+
+  @@unique([manifestVersionId, inventoryLotId])
+  @@index([productId])
+}
+
+model SealEvent {
+  id          String     @id @default(uuid()) @db.Uuid
+  containerId String     @db.Uuid
+  sealCode    String
+  action      SealAction
+  reason      String?
+  actorId     String?    @db.Uuid
+  occurredAt  DateTime   @default(now())
+  container   Container  @relation(fields: [containerId], references: [id], onDelete: Restrict)
+
+  @@unique([sealCode, action])
+  @@index([containerId, occurredAt])
+}
+
+model InventoryLedgerEntry {
+  id                    String                      @id @default(uuid()) @db.Uuid
+  sequence              BigInt                      @unique @default(autoincrement())
+  eventType             InventoryLedgerEventType
+  idempotencyKey        String                      @unique
+  productId             String                      @db.Uuid
+  inventoryLotId        String                      @db.Uuid
+  containerId           String?                     @db.Uuid
+  quantity              Decimal                     @db.Decimal(18, 3)
+  fromAvailabilityState InventoryAvailabilityState?
+  toAvailabilityState   InventoryAvailabilityState?
+  fromLocationId        String?                     @db.Uuid
+  toLocationId          String?                     @db.Uuid
+  fromStorageLocationId String?                     @db.Uuid
+  toStorageLocationId   String?                     @db.Uuid
+  businessReferenceType String
+  businessReferenceId   String
+  correlationId         String
+  metadata              Json?
+  occurredAt            DateTime
+  recordedAt            DateTime                    @default(now())
+  product               Product                     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  inventoryLot          InventoryLot                @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict)
+  container             Container?                  @relation(fields: [containerId], references: [id], onDelete: Restrict)
+  fromLocation          OperationalLocation?        @relation("LedgerFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation            OperationalLocation?        @relation("LedgerToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
+  fromStorageLocation   StorageLocation?            @relation("LedgerFromStorage", fields: [fromStorageLocationId], references: [id], onDelete: Restrict)
+  toStorageLocation     StorageLocation?            @relation("LedgerToStorage", fields: [toStorageLocationId], references: [id], onDelete: Restrict)
+
+  @@index([inventoryLotId, sequence])
+  @@index([containerId, sequence])
+  @@index([businessReferenceType, businessReferenceId])
+  @@index([correlationId])
+}
+
+model ContainerContentProjection {
+  containerId    String       @db.Uuid
+  inventoryLotId String       @db.Uuid
+  productId      String       @db.Uuid
+  quantity       Decimal      @db.Decimal(18, 3)
+  ledgerSequence BigInt
+  updatedAt      DateTime     @updatedAt
+  container      Container    @relation(fields: [containerId], references: [id], onDelete: Restrict)
+  inventoryLot   InventoryLot @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@id([containerId, inventoryLotId])
+  @@index([productId])
 }
