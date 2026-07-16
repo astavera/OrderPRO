@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LocationType {
+  WAREHOUSE
+  STORE
+}
+
+enum RoleCode {
+  OWNER
+  OPERATIONS_ADMIN
+  INVENTORY_CONTROLLER
+  STORE_MANAGER
+  STORE_STAFF
+  WAREHOUSE_MANAGER
+  WAREHOUSE_STAFF
+  AUDITOR
+}
+
+enum MessageStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  DEAD_LETTER
+}
+
+model OperationalLocation {
+  id             String @id @default(uuid()) @db.Uuid
+  code           String @unique @db.VarChar(8)
+  name           String
+  type           LocationType
+  active         Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  squareMappings SquareLocationMapping[]
+  userGrants     UserLocationGrant[]
+}
+
+model SquareLocationMapping {
+  id                    String @id @default(uuid()) @db.Uuid
+  operationalLocationId String @db.Uuid
+  squareLocationId      String
+  effectiveFrom         DateTime
+  effectiveTo           DateTime?
+  verifiedByUserId      String? @db.Uuid
+  createdAt             DateTime @default(now())
+  operationalLocation   OperationalLocation @relation(fields: [operationalLocationId], references: [id], onDelete: Restrict)
+  @@unique([squareLocationId, effectiveFrom])
+  @@index([operationalLocationId, effectiveFrom])
+}
+
+model User {
+  id          String @id @default(uuid()) @db.Uuid
+  subject     String @unique
+  email       String @unique
+  displayName String
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  roles       UserRole[]
+  locations   UserLocationGrant[]
+  auditEvents AuditEvent[]
+}
+
+model UserRole {
+  userId String @db.Uuid
+  role RoleCode
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, role])
+}
+
+model UserLocationGrant {
+  userId String @db.Uuid
+  locationId String @db.Uuid
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location OperationalLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  @@id([userId, locationId])
+}
+
+model IdempotencyRecord {
+  id String @id @default(uuid()) @db.Uuid
+  scope String
+  key String
+  requestHash String
+  responseStatus Int?
+  responseBody Json?
+  lockedUntil DateTime?
+  completedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@unique([scope, key])
+  @@index([expiresAt])
+}
+
+model WebhookInbox {
+  id String @id @default(uuid()) @db.Uuid
+  provider String
+  externalId String
+  eventType String
+  payload Json
+  payloadHash String
+  status MessageStatus @default(PENDING)
+  attemptCount Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  processedAt DateTime?
+  lastErrorCode String?
+  receivedAt DateTime @default(now())
+  @@unique([provider, externalId])
+  @@index([status, nextAttemptAt])
+}
+
+model OutboxMessage {
+  id String @id @default(uuid()) @db.Uuid
+  topic String
+  aggregateType String
+  aggregateId String
+  payload Json
+  status MessageStatus @default(PENDING)
+  attemptCount Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  processedAt DateTime?
+  lastErrorCode String?
+  createdAt DateTime @default(now())
+  @@index([status, nextAttemptAt])
+  @@index([aggregateType, aggregateId])
+}
+
+model FeatureFlag {
+  key String @id
+  enabled Boolean @default(false)
+  description String
+  rules Json?
+  updatedAt DateTime @updatedAt
+}
+
+model AuditEvent {
+  id String @id @default(uuid()) @db.Uuid
+  actorId String? @db.Uuid
+  action String
+  entityType String
+  entityId String?
+  locationCode String?
+  correlationId String
+  reason String?
+  before Json?
+  after Json?
+  occurredAt DateTime @default(now())
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  @@index([entityType, entityId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([correlationId])
+}
