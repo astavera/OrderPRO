@@ -215,9 +215,10 @@ finally {
     $secureToken.Dispose()
   }
   try {
-    Set-Clipboard -Value ""
+    Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+    [System.Windows.Forms.Clipboard]::Clear()
   }
   catch {
-    # Current clipboard cleanup is best-effort. Windows history is user-managed.
+    # Best effort: this clears the current clipboard only; Win+V/cloud history remains user-managed.
   }
 }

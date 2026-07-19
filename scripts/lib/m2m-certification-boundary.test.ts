@@ -62,6 +62,11 @@ describe("offline M2M certification boundary", () => {
     expect(wrapper).not.toContain("--env-file");
     expect(wrapper).not.toContain("PtrToStringBSTR");
     expect(wrapper).not.toContain("ReadAllLines");
+    expect(wrapper).toContain(
+      "Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop",
+    );
+    expect(wrapper).toContain("[System.Windows.Forms.Clipboard]::Clear()");
+    expect(wrapper).not.toContain('Set-Clipboard -Value ""');
     expect(wrapper.indexOf("$args.Count")).toBeLessThan(wrapper.indexOf("Read-Host"));
     expect(wrapper.indexOf("$forbiddenInheritedEnvironment")).toBeLessThan(
       wrapper.indexOf("Read-Host"),

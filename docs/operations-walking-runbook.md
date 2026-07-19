@@ -137,7 +137,7 @@ Quote addresses and coordinates are customer data. Do not include them in ordina
 1. Confirm RFC 9068, RS256, 3600 seconds and the exact two Local Delivery scopes in Auth0.
 2. Review and commit the certification code; require a completely clean Git tree before generating a token.
 3. Generate the token in the authorized consumer/Auth0 Test flow; never move the Client Secret into OrderPro.
-4. Run `npm run m2m:certify:staging` and paste only the token into the hidden prompt. Clear the current clipboard and remove the token from Windows **Win+V** history if enabled.
+4. Run `npm run m2m:certify:staging` and paste only the token into the hidden prompt. The wrapper makes a best-effort attempt to clear the current clipboard with the Windows clipboard API. Confirm the cleanup and manually remove the token from Windows **Win+V** history or cloud sync if enabled.
 5. Require `CERTIFIED_PENDING_APPROVAL`, the exact audience, source commit, audit event ID and evidence digest. Store only that sanitized output in the change record.
 6. Confirm client, credential and grants remain `PENDING_VERIFICATION`, M2M mode remains `DISABLED`, the V4 gate remains false and all locked routes still return 503.
 7. Treat registry activation and runtime enablement as later, separate approvals. Certification alone authorizes nothing.

@@ -105,7 +105,7 @@ En una terminal nueva, desde la raíz de OrderPro, ejecuta:
 npm run m2m:certify:staging
 ```
 
-La terminal pedirá `Paste the Auth0 access token (input is hidden)`. Pega únicamente el access token y presiona Enter. La entrada no se muestra; el wrapper la entrega por una tubería `stdin` con tiempo máximo, borra sus buffers mutables y vacía el portapapeles actual al terminar. El token nunca viaja en argumentos, archivos ni variables de entorno. El wrapper también rechaza secretos o tokens Auth0 heredados por la terminal. El proceso hijo recibe una lista mínima de variables: conexión a la base, configuración pública del verificador, bloqueos del runtime, hashes esperados y la ruta de Git.
+La terminal pedirá `Paste the Auth0 access token (input is hidden)`. Pega únicamente el access token y presiona Enter. La entrada no se muestra; el wrapper la entrega por una tubería `stdin` con tiempo máximo, borra sus buffers mutables e intenta limpiar el portapapeles actual al terminar mediante la API compatible con Windows PowerShell 5.1. Esa limpieza es de mejor esfuerzo y no borra el historial de **Win+V** ni la sincronización en la nube. El token nunca viaja en argumentos, archivos ni variables de entorno. El wrapper también rechaza secretos o tokens Auth0 heredados por la terminal. El proceso hijo recibe una lista mínima de variables: conexión a la base, configuración pública del verificador, bloqueos del runtime, hashes esperados y la ruta de Git.
 
 El comando usa `-ExecutionPolicy Bypass` únicamente para ese proceso de PowerShell porque la política local bloquea scripts sin firma. No cambia la política del equipo; antes de leer el token, el propio wrapper confirma que su archivo pertenece al commit limpio que se va a certificar.
 
