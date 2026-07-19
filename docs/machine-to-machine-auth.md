@@ -1,12 +1,39 @@
 # Machine-to-machine authentication and webhook signing
 
-Status: target security contract. No issuer, client credential, signing secret, token endpoint or production rate limit is configured by this document.
+Status: Auth0 is selected for the STAGING M2M pilot. The tenant values are configured, the public JWKS was verified, and a fail-closed RFC 9068 verifier plus durable client registry are implemented. The client and grants remain `PENDING_VERIFICATION`, providers are not certified, and the API remains locked.
 
 Human Supabase sessions and administrative cookies are never valid machine credentials. E-commerce and worker integrations use a separate identity, scope and secret lifecycle. Secrets stay server-side and must not use `NEXT_PUBLIC_` environment variables.
 
 ## Recommended API authentication
 
-The preferred target is OAuth 2.0 Client Credentials with short-lived bearer access tokens. The identity provider, issuer, audience, token URL, token format and credential storage mechanism remain deployment decisions. Until those are selected and certified, the `/v1` API is dependency-blocked for production M2M use.
+The selected STAGING target is Auth0 OAuth 2.0 Client Credentials with short-lived RFC 9068 bearer access tokens. The fixed pilot contract uses RS256, a maximum configured token lifetime of 3600 seconds and explicit grants for `local-delivery:quote` and `local-delivery:holds`. Implementation is complete, but activation and end-to-end certification are not; the `/v1` API remains dependency-blocked for M2M use.
+
+### Auth0 STAGING decision
+
+OrderPro does not accept the existing human Supabase Auth session as M2M identity. Supabase remains the human login provider and PostgreSQL platform. Auth0 is isolated to machine callers for the STAGING pilot; this does not migrate users or change human sessions.
+
+The operator provides only the canonical Auth0 Tenant Domain, the API Identifier/Audience and the public M2M Client ID. The STAGING pilot values have been received, but the durable machine client, credential and grants remain `PENDING_VERIFICATION`. The issuer and static JWKS URI are derived from the tenant domain. OrderPro never receives the Auth0 Client Secret, a Management API token or credentials used by the caller to acquire tokens. See [Auth0 M2M STAGING setup](auth0-m2m-staging-setup.md).
+
+Do not connect the implemented JWT verifier to a public runtime until an audited decision record certifies all of the following together:
+
+- issuer and exact HTTPS JWKS URI;
+- audience and one approved asymmetric signing algorithm;
+- token lifetime, clock-skew policy and outage behavior;
+- exact client identity and scope claim names;
+- durable client inventory, environment, owner, revocation state and grants;
+- rotation, incident response and monitoring ownership.
+
+The resource server must use a statically trusted JWKS URI; it must never follow `jku` or `x5u` supplied by a token. A successful signature check is not authorization by itself: the client must also be active in OrderPro's registry and have the exact required scope and environment grant.
+
+The STAGING verifier is implemented in `src/infrastructure/m2m/auth0-machine-authenticator.ts`. It requires a compact Bearer JWT with `typ=at+jwt`, `alg=RS256`, a bounded `kid`, the exact issuer and only the configured audience, `client_id`, `<client_id>@clients` subject, `jti`, `iat`, `exp`, and a space-delimited `scope`. It rejects token-supplied key URLs/material, lifetimes over 3600 seconds, malformed or duplicate scopes, and unknown or inactive clients. Sender-constrained (`cnf`) and Auth0 Organization (`org_id`/`org_name`) tokens are rejected until their proof/binding is deliberately implemented. Its authenticated principal contains OrderPro's internal client key and only the intersection of token scopes with active registry grants; raw Auth0 identifiers and tokens never cross the application boundary.
+
+The tenant discovery document and JWKS are public and were checked without credentials. The current JWKS exposes multiple RSA/RS256 signing keys, so resolution is by `kid` with bounded remote caching and rotation support. This confirms the public key source, not the API's private Dashboard settings; an end-to-end STAGING token test is still required before activation.
+
+The one-time command `npm run m2m:certify:staging` accepts an access token only through a hidden prompt and anonymous stdin pipe. It refuses command-line arguments, regular-file stdin, a dirty Git tree or an uncommitted verifier, and gives the child only an allowlisted environment. It reuses the production verifier/JWKS while a private certification-only registry wrapper proves that the real registry still denies the pending credential. A successful run records only `verifiedAt` and sanitized audit evidence tied to the source commit/tree; no status becomes active and no raw token, JTI, external Client ID or authorization header is retained. See the [Auth0 STAGING setup](auth0-m2m-staging-setup.md#certificación-real-sin-activar-el-api).
+
+This STAGING workstation ceremony attests the committed sources and dependency lockfile, but it is not a signed hermetic build attestation for the Node executable or installed `node_modules` bytes. Production certification must run the same command from a reviewed, immutable CI artifact or container with dependency-integrity evidence.
+
+Local Delivery V4 uses an additional all-or-nothing runtime gate. `ORDERPRO_LOCAL_DELIVERY_V4_API_ENABLED` is server-only and defaults to disabled. Even a future valid machine credential cannot reach quote or hold behavior unless authentication, client registry, all real providers, persistent stores, the versioned allocation strategy and the requested environment are ready at the same time. Partial configuration remains HTTP 503 and must not invoke business providers.
 
 An access token should identify one client and carry only approved scopes. A verifier must check signature, issuer, audience, expiration and scope on every request. Expected security claims include a stable client subject, expiration, audience and granted scopes; their exact names depend on the selected issuer.
 
@@ -24,11 +51,15 @@ If OAuth cannot be provided, a signed-request HMAC alternative may be designed a
 | `walking-zones:rollback` | Create a new publication from historical content |
 | `availability:read` | Read live slots for an already selected location |
 | `reservations:write` | Create, read, confirm and release capacity holds |
+| `local-delivery:quote` | Evaluate a Local Walking Delivery V4 address/cart and return geographic eligibility, fee and selected-store slots |
+| `local-delivery:holds` | Create, confirm and release V4 capacity plus inventory holds |
 | `fulfillment:write` | Future operational order/fulfillment commands; no stable endpoint is defined in v1 yet |
 
 Scopes are additive but not interchangeable. A client with `walking-zones:write` cannot publish. Human permissions such as `fulfillment.publish` do not create M2M scopes, and M2M scopes do not grant access to the administrative panel.
 
 `POST /v1/walking-delivery/quotes` requires both `walking-zones:read` and `availability:read`: the first authorizes immutable zone/policy evaluation and the second authorizes live slots. Possession of only one scope is insufficient. The endpoint remains dependency-blocked until the target M2M verifier and client grants exist.
+
+Local Walking Delivery V4 uses a separate versioned contract: `POST /api/v1/local-delivery/quote` requires `local-delivery:quote`, while `/api/v1/local-delivery/holds` and its `confirm`/`release` transitions require `local-delivery:holds`. Quote and hold creation require `Idempotency-Key`; confirm/release are state transitions keyed by the hold plus the same `orderId` or release `reason`. Prisma quote/hold adapters exist but remain disconnected. All four routes continue returning `503 M2M_AUTH_NOT_CONFIGURED` until the pending client and grants are approved, real providers are certified, and the complete runtime composition is reviewed. See the [V4 OpenAPI contract](openapi/orderpro-local-delivery-v1.yaml).
 
 ## API request headers
 
@@ -40,7 +71,7 @@ Accept: application/json
 X-Correlation-ID: <caller-generated-unique-id>
 ```
 
-Every mutation additionally requires the headers below. The walking-delivery quote operation also requires `Idempotency-Key` even though it does not create a capacity hold, so a lost response can be replayed without recalculating against changed live inputs:
+Every operation whose contract requires idempotency additionally uses the headers below. Both walking-delivery quote operations and Local Delivery V4 hold creation require `Idempotency-Key`, so a lost response can be replayed without recalculating against changed live inputs:
 
 ```http
 Content-Type: application/json
@@ -163,7 +194,8 @@ Do not disable authentication, reuse a human cookie or expose a secret to the br
 
 ## Decisions required before enablement
 
-- OAuth issuer, audience, token endpoint, signing algorithms and token lifetime.
+- End-to-end Auth0 STAGING token evidence for the configured issuer, audience, RFC 9068 profile and scopes.
+- Audited activation of the pending client, credential and exact grants.
 - Whether a signed-request HMAC fallback is necessary.
 - Client inventory, owners and exact scope grants.
 - Rate and payload-size limits.
@@ -172,3 +204,5 @@ Do not disable authentication, reuse a human cookie or expose a secret to the br
 - Secret manager, rotation cadence and emergency revocation owner.
 - Retry/backoff/dead-letter policy.
 - Customer-data redaction and retention controls.
+
+`ORDERPRO_RUNTIME_ENVIRONMENT=STAGING` is already part of the closed runtime guard. The server-only Auth0 configuration inputs are `ORDERPRO_M2M_AUTH_MODE`, `ORDERPRO_M2M_ISSUER`, `ORDERPRO_M2M_AUDIENCE`, `ORDERPRO_M2M_JWKS_URI` and `ORDERPRO_M2M_ALLOWED_ALGORITHM`. None may use the `NEXT_PUBLIC_` prefix. Their parser can validate configuration but cannot activate Local Delivery V4. The M2M client's own secret and token acquisition configuration belong in that client's secret manager, not in the OrderPro resource server.

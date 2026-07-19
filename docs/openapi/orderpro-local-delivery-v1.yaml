@@ -1,0 +1,852 @@
+openapi: 3.1.0
+info:
+  title: OrderPro Local Walking Delivery API
+  version: 1.0.0-staging
+  summary: Versioned quote and atomic hold contract for Local Walking Delivery V4.
+  description: |
+    Machine-to-machine contract for the DRAFT/STAGING policy
+    `walking-route-distance-v4-base-10-2026-07-16` and zone set
+    `upper-east-side-walking-zones-v1`.
+
+    The current runtime intentionally fails closed with HTTP 503 and
+    `M2M_AUTH_NOT_CONFIGURED` until approved authentication and persistent
+    provider adapters are connected. This document does not authorize a
+    production release.
+  contact:
+    name: OrderPro Operations
+servers:
+  - url: /
+    description: Relative OrderPro host; use only an explicitly approved STAGING origin.
+tags:
+  - name: Local Delivery Quotes
+  - name: Local Delivery Holds
+security:
+  - bearerAuth: []
+x-orderpro-policy:
+  policyId: walking-route-distance-v4-base-10
+  feePolicyVersionId: walking-route-distance-v4-base-10-2026-07-16
+  zoneVersionId: upper-east-side-walking-zones-v1
+  status: DRAFT
+  environment: STAGING
+  strategy: WALKING_ROUTE_DISTANCE
+  distanceBasis: ONE_WAY_FROM_SELECTED_STORE
+  distanceUnit: FEET
+  routingProfile: walking
+  currency: USD
+  capacityFormula: "(walkingDurationSeconds * 2) + preparationBufferSeconds + handoffBufferSeconds"
+  versionedOperationalFields:
+    - quoteTtlSeconds
+    - holdTtlSeconds
+    - preparationBufferSeconds
+    - handoffBufferSeconds
+  supportedPostalCodes:
+    - "10021"
+    - "10065"
+    - "10075"
+    - "10028"
+    - "10128"
+  tiers:
+    - id: free-local
+      minimumExclusiveFeet: null
+      maximumInclusiveFeet: 1200
+      feeCents: 0
+    - id: base-delivery
+      minimumExclusiveFeet: 1200
+      maximumInclusiveFeet: 2200
+      feeCents: 1000
+    - id: extended-12
+      minimumExclusiveFeet: 2200
+      maximumInclusiveFeet: 2700
+      feeCents: 1200
+    - id: extended-14
+      minimumExclusiveFeet: 2700
+      maximumInclusiveFeet: 2950
+      feeCents: 1400
+    - id: extended-15
+      minimumExclusiveFeet: 2950
+      maximumInclusiveFeet: 3250
+      feeCents: 1500
+    - id: extended-17
+      minimumExclusiveFeet: 3250
+      maximumInclusiveFeet: 3500
+      feeCents: 1700
+    - id: extended-19
+      minimumExclusiveFeet: 3500
+      maximumInclusiveFeet: 3750
+      feeCents: 1900
+    - id: extended-21
+      minimumExclusiveFeet: 3750
+      maximumInclusiveFeet: 4000
+      feeCents: 2100
+    - id: extended-23
+      minimumExclusiveFeet: 4000
+      maximumInclusiveFeet: 4250
+      feeCents: 2300
+    - id: whole-zone-25
+      minimumExclusiveFeet: 4250
+      maximumInclusiveFeet: null
+      feeCents: 2500
+paths:
+  /api/v1/local-delivery/quote:
+    post:
+      tags:
+        - Local Delivery Quotes
+      operationId: createLocalDeliveryQuoteV4
+      summary: Evaluate an exact address and cart for local walking delivery.
+      description: |
+        Requires M2M scope `local-delivery:quote`.
+
+        A valid, exact Manhattan address whose normalized five-digit ZIP is not
+        one of 10021, 10065, 10075, 10028 or 10128 returns HTTP 200 with
+        `reasonCode: CONTACT_STORE` and the exact storefront message
+        `Contact store`. No policy, polygon, route, fee, inventory or slot
+        provider is called for that outcome.
+
+        A non-Manhattan address returns `ADDRESS_NOT_IN_MANHATTAN`. A point in
+        one of the five ZIPs but outside the published polygon returns
+        `OUTSIDE_WALKING_AREA`. Those outcomes are not `CONTACT_STORE`.
+
+        For 10075, both stores are routed with the same walking provider and
+        both candidate routes are returned. Only slots from the selected store
+        may appear; there is no automatic fallback.
+
+        `eligible` expresses geographic eligibility against the published
+        zone. `bookable` expresses whether at least one returned selected-store
+        slot can be held now. Therefore `NO_SLOTS_FOR_SELECTED_LOCATION`
+        returns `eligible: true` and `bookable: false`.
+      x-orderpro-required-scopes:
+        - local-delivery:quote
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalDeliveryQuoteRequest"
+            examples:
+              sharedPostalCode:
+                summary: Compare both stores for ZIP 10075.
+                value:
+                  address:
+                    line1: 500 E 80th St
+                    line2: null
+                    city: New York
+                    state: NY
+                    postalCode: "10075"
+                    country: US
+                  cartLines:
+                    - variantId: variant-id
+                      quantity: 1
+                  requestedDate: "2026-07-20"
+              manhattanContactStore:
+                summary: Manhattan address outside the five supported ZIPs.
+                value:
+                  address:
+                    line1: 500 Madison Ave
+                    line2: null
+                    city: New York
+                    state: NY
+                    postalCode: "10022"
+                    country: US
+                  cartLines:
+                    - variantId: variant-id
+                      quantity: 1
+                  requestedDate: "2026-07-20"
+      responses:
+        "200":
+          description: Priced quote, selected-store availability result, or CONTACT_STORE result.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: ../schemas/local-delivery-quote-v4.schema.json
+              examples:
+                eligible10075:
+                  value:
+                    quoteId: quote-10075-001
+                    replayed: false
+                    eligible: true
+                    bookable: true
+                    reasonCode: ELIGIBLE
+                    normalizedAddress:
+                      line1: 500 E 80th St
+                      line2: null
+                      city: New York
+                      state: NY
+                      postalCode: "10075"
+                      country: US
+                      borough: Manhattan
+                    coordinates:
+                      latitude: 40.775
+                      longitude: -73.95
+                    postalCode: "10075"
+                    selectedLocationId: third_avenue
+                    selectedLocationName: 3rd Avenue Store
+                    assignmentRule: NEAREST_WALKING_ROUTE
+                    walkingDistanceFeet: 4261
+                    walkingDurationSeconds: 1038
+                    roundTripDistanceFeet: 8522
+                    estimatedRoundTripDurationSeconds: 2076
+                    requiredCapacitySeconds: 2376
+                    feeCents: 2500
+                    currency: USD
+                    feeTierId: whole-zone-25
+                    candidateRoutes:
+                      - locationId: third_avenue
+                        locationPriority: 1
+                        walkingDistanceFeet: 4261
+                        walkingDurationSeconds: 1038
+                        routingProvider: approved-walking-router
+                      - locationId: east_86th_street
+                        locationPriority: 2
+                        walkingDistanceFeet: 4490
+                        walkingDurationSeconds: 1080
+                        routingProvider: approved-walking-router
+                    availableSlots:
+                      - slotId: slot-20260720-1400
+                        locationId: third_avenue
+                        startsAt: "2026-07-20T14:00:00-04:00"
+                        endsAt: "2026-07-20T15:00:00-04:00"
+                        remainingCapacitySeconds: 12000
+                    inventoryStatus: READY
+                    transferEarliestReadyAt: null
+                    inventoryOwnerLocationIds:
+                      - third_avenue
+                    inventoryNodeIds:
+                      - third_avenue
+                    zoneVersionId: upper-east-side-walking-zones-v1
+                    feePolicyVersionId: walking-route-distance-v4-base-10-2026-07-16
+                    routingProvider: approved-walking-router
+                    routingProfile: walking
+                    routeCalculatedAt: "2026-07-16T16:00:00Z"
+                    expiresAt: "2026-07-16T16:15:00Z"
+                    correlationId: corr-local-delivery-001
+                noSlotsForSelectedLocation:
+                  value:
+                    quoteId: quote-no-slots-001
+                    replayed: false
+                    eligible: true
+                    bookable: false
+                    reasonCode: NO_SLOTS_FOR_SELECTED_LOCATION
+                    normalizedAddress:
+                      line1: 599 E 85th St
+                      line2: null
+                      city: New York
+                      state: NY
+                      postalCode: "10028"
+                      country: US
+                      borough: Manhattan
+                    coordinates:
+                      latitude: 40.7769
+                      longitude: -73.9438
+                    postalCode: "10028"
+                    selectedLocationId: east_86th_street
+                    selectedLocationName: 86th Street Store
+                    assignmentRule: FIXED_POSTAL_ZONE
+                    walkingDistanceFeet: 3924
+                    walkingDurationSeconds: 900
+                    roundTripDistanceFeet: 7848
+                    estimatedRoundTripDurationSeconds: 1800
+                    requiredCapacitySeconds: 2100
+                    feeCents: 2100
+                    currency: USD
+                    feeTierId: extended-21
+                    candidateRoutes:
+                      - locationId: east_86th_street
+                        locationPriority: 2
+                        walkingDistanceFeet: 3924
+                        walkingDurationSeconds: 900
+                        routingProvider: approved-walking-router
+                    availableSlots: []
+                    inventoryStatus: READY
+                    transferEarliestReadyAt: null
+                    inventoryOwnerLocationIds:
+                      - east_86th_street
+                    inventoryNodeIds:
+                      - east_86th_street
+                    zoneVersionId: upper-east-side-walking-zones-v1
+                    feePolicyVersionId: walking-route-distance-v4-base-10-2026-07-16
+                    routingProvider: approved-walking-router
+                    routingProfile: walking
+                    routeCalculatedAt: "2026-07-16T16:00:00Z"
+                    expiresAt: "2026-07-16T16:15:00Z"
+                    correlationId: corr-no-slots-001
+                contactStore:
+                  value:
+                    quoteId: quote-contact-001
+                    replayed: false
+                    eligible: false
+                    bookable: false
+                    reasonCode: CONTACT_STORE
+                    storefrontMessage: Contact store
+                    normalizedAddress:
+                      line1: 500 Madison Ave
+                      line2: null
+                      city: New York
+                      state: NY
+                      postalCode: "10022"
+                      country: US
+                      borough: Manhattan
+                    coordinates:
+                      latitude: 40.758
+                      longitude: -73.97
+                    postalCode: "10022"
+                    correlationId: corr-contact-store-001
+                    expiresAt: "2026-07-16T16:05:00Z"
+        "400":
+          $ref: "#/components/responses/InvalidJson"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /api/v1/local-delivery/holds:
+    post:
+      tags:
+        - Local Delivery Holds
+      operationId: createLocalDeliveryCapacityHold
+      summary: Atomically reserve selected-slot capacity and cart inventory.
+      description: |
+        Requires M2M scope `local-delivery:holds`. The quote must belong to the
+        authenticated client, be eligible and unexpired, and the slot must
+        belong to the quote's selected location. Capacity and inventory are
+        committed together or neither is changed. The hold expiration uses the
+        `holdTtlSeconds` persisted with the quote's exact policy version; it is
+        never supplied or recomputed by the caller.
+      x-orderpro-required-scopes:
+        - local-delivery:holds
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCapacityHoldRequest"
+            example:
+              quoteId: quote-10075-001
+              slotId: slot-20260720-1400
+      responses:
+        "200":
+          description: Idempotent replay of an existing hold.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacityHoldResult"
+        "201":
+          description: New capacity and inventory hold acquired atomically.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacityHoldResult"
+              example:
+                hold:
+                  capacityHoldId: hold-001
+                  quoteId: quote-10075-001
+                  slotId: slot-20260720-1400
+                  locationId: third_avenue
+                  clientId: storefront-staging
+                  correlationId: corr-local-delivery-hold-001
+                  inventoryReservationId: inventory-reservation-001
+                  capacitySeconds: 2376
+                  status: HELD
+                  createdAt: "2026-07-16T16:02:00Z"
+                  expiresAt: "2026-07-16T16:12:00Z"
+                  confirmedOrderId: null
+                  confirmedAt: null
+                  releasedAt: null
+                  releaseReason: null
+                replayed: false
+        "400":
+          $ref: "#/components/responses/InvalidJson"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "410":
+          $ref: "#/components/responses/Gone"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /api/v1/local-delivery/holds/{holdId}/confirm:
+    post:
+      tags:
+        - Local Delivery Holds
+      operationId: confirmLocalDeliveryCapacityHold
+      summary: Confirm a held capacity and inventory reservation.
+      description: Requires M2M scope `local-delivery:holds`. Repeating an already confirmed transition for the same orderId is idempotent.
+      x-orderpro-required-scopes:
+        - local-delivery:holds
+      parameters:
+        - $ref: "#/components/parameters/HoldId"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmCapacityHoldRequest"
+            example:
+              orderId: order-001
+      responses:
+        "200":
+          $ref: "#/components/responses/HoldTransition"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "400":
+          $ref: "#/components/responses/InvalidJson"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /api/v1/local-delivery/holds/{holdId}/release:
+    post:
+      tags:
+        - Local Delivery Holds
+      operationId: releaseLocalDeliveryCapacityHold
+      summary: Release capacity and inventory exactly once.
+      description: |
+        Requires M2M scope `local-delivery:holds`. Used after cancellation,
+        payment failure or a manual release, with the reason included in the
+        request and response audit. Expiry reconciliation records
+        `QUOTE_EXPIRED` and must provide the same exactly-once restoration
+        semantics.
+      x-orderpro-required-scopes:
+        - local-delivery:holds
+      parameters:
+        - $ref: "#/components/parameters/HoldId"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReleaseCapacityHoldRequest"
+            examples:
+              cancelled:
+                value:
+                  reason: ORDER_CANCELLED
+              paymentFailed:
+                value:
+                  reason: PAYMENT_FAILED
+      responses:
+        "200":
+          $ref: "#/components/responses/HoldTransition"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "400":
+          $ref: "#/components/responses/InvalidJson"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Approved machine credential only; human Supabase sessions are not accepted.
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: true
+      description: Caller-generated stable identifier propagated in the response.
+      schema:
+        $ref: "#/components/schemas/CorrelationIdValue"
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Scoped to the authenticated machine client. Reuse with another payload is a conflict.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 160
+    HoldId:
+      name: holdId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/PersistedStableId"
+  headers:
+    CorrelationId:
+      required: true
+      description: Correlation identifier used by OrderPro for this response.
+      schema:
+        $ref: "#/components/schemas/CorrelationIdValue"
+    NoStore:
+      required: true
+      description: Sensitive quote and hold responses must not be cached.
+      schema:
+        type: string
+        const: no-store
+  schemas:
+    PersistedStableId:
+      type: string
+      maxLength: 160
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$"
+    ClientId:
+      type: string
+      maxLength: 120
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$"
+    CorrelationIdValue:
+      type: string
+      maxLength: 120
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$"
+    LocalDeliveryAddress:
+      type: object
+      additionalProperties: false
+      required:
+        - line1
+        - line2
+        - city
+        - state
+        - postalCode
+        - country
+      properties:
+        line1:
+          type: string
+          minLength: 3
+          maxLength: 200
+        line2:
+          type:
+            - string
+            - "null"
+          maxLength: 200
+        city:
+          type: string
+          minLength: 2
+          maxLength: 100
+        state:
+          type: string
+          minLength: 2
+          maxLength: 2
+        postalCode:
+          type: string
+          pattern: "^[0-9]{5}(?:-[0-9]{4})?$"
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+    CartLine:
+      type: object
+      additionalProperties: false
+      required:
+        - variantId
+        - quantity
+      properties:
+        variantId:
+          $ref: "#/components/schemas/PersistedStableId"
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 999
+    LocalDeliveryQuoteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - address
+        - cartLines
+        - requestedDate
+      properties:
+        address:
+          $ref: "#/components/schemas/LocalDeliveryAddress"
+        cartLines:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CartLine"
+        requestedDate:
+          type: string
+          format: date
+    CreateCapacityHoldRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - quoteId
+        - slotId
+      properties:
+        quoteId:
+          $ref: "#/components/schemas/PersistedStableId"
+        slotId:
+          $ref: "#/components/schemas/PersistedStableId"
+    ConfirmCapacityHoldRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - orderId
+      properties:
+        orderId:
+          $ref: "#/components/schemas/PersistedStableId"
+    ReleaseCapacityHoldRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        reason:
+          enum:
+            - ORDER_CANCELLED
+            - PAYMENT_FAILED
+            - MANUAL
+    CapacityHold:
+      type: object
+      additionalProperties: false
+      required:
+        - capacityHoldId
+        - quoteId
+        - slotId
+        - locationId
+        - clientId
+        - correlationId
+        - inventoryReservationId
+        - capacitySeconds
+        - status
+        - createdAt
+        - expiresAt
+        - confirmedOrderId
+        - confirmedAt
+        - releasedAt
+        - releaseReason
+      properties:
+        capacityHoldId:
+          $ref: "#/components/schemas/PersistedStableId"
+        quoteId:
+          $ref: "#/components/schemas/PersistedStableId"
+        slotId:
+          $ref: "#/components/schemas/PersistedStableId"
+        locationId:
+          enum:
+            - third_avenue
+            - east_86th_street
+        clientId:
+          $ref: "#/components/schemas/ClientId"
+        correlationId:
+          $ref: "#/components/schemas/CorrelationIdValue"
+          description: Immutable correlation identifier recorded when this hold was created. A later transition has its own X-Correlation-ID response header.
+        inventoryReservationId:
+          $ref: "#/components/schemas/PersistedStableId"
+        capacitySeconds:
+          type: integer
+          minimum: 0
+        status:
+          enum:
+            - HELD
+            - CONFIRMED
+            - RELEASED
+            - EXPIRED
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        confirmedOrderId:
+          oneOf:
+            - $ref: "#/components/schemas/PersistedStableId"
+            - type: "null"
+        confirmedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        releasedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        releaseReason:
+          type:
+            - string
+            - "null"
+          enum:
+            - QUOTE_EXPIRED
+            - ORDER_CANCELLED
+            - PAYMENT_FAILED
+            - INVENTORY_UNAVAILABLE
+            - CAPACITY_UNAVAILABLE
+            - MANUAL
+            - null
+    CapacityHoldResult:
+      type: object
+      additionalProperties: false
+      required:
+        - hold
+        - replayed
+      properties:
+        hold:
+          $ref: "#/components/schemas/CapacityHold"
+        replayed:
+          type: boolean
+    CapacityHoldTransitionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - hold
+        - changed
+      properties:
+        hold:
+          $ref: "#/components/schemas/CapacityHold"
+        changed:
+          type: boolean
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - correlationId
+      properties:
+        code:
+          type: string
+          enum:
+            - UNAUTHORIZED
+            - M2M_AUTH_NOT_CONFIGURED
+            - FORBIDDEN
+            - INVALID_CORRELATION_ID
+            - INVALID_IDEMPOTENCY_KEY
+            - INVALID_JSON
+            - INVALID_REQUEST
+            - INVALID_ADDRESS
+            - ADDRESS_NOT_IN_MANHATTAN
+            - OUTSIDE_WALKING_AREA
+            - DISTANCE_UNAVAILABLE
+            - ROUTING_PROVIDER_UNAVAILABLE
+            - NO_SLOTS_FOR_SELECTED_LOCATION
+            - INVENTORY_NOT_READY
+            - TRANSFER_REQUIRED
+            - QUOTE_EXPIRED
+            - CAPACITY_HOLD_FAILED
+            - POLICY_VERSION_UNAVAILABLE
+            - SLOTS_UNAVAILABLE
+            - IDEMPOTENCY_CONFLICT
+        message:
+          type: string
+          minLength: 1
+        correlationId:
+          $ref: "#/components/schemas/CorrelationIdValue"
+  responses:
+    InvalidJson:
+      description: Request body is not valid JSON.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or invalid machine credential.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Machine credential lacks the operation's required scope.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Idempotency conflict, inventory/capacity conflict, or invalid hold state.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Gone:
+      description: Quote expired before the hold could be acquired.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unprocessable:
+      description: Invalid request/header/address, non-Manhattan address, or point outside the published zone.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unavailable:
+      description: M2M, published policy, routing, slot, or another required provider is unavailable; no estimate is invented.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    HoldTransition:
+      description: Hold transition completed or idempotently unchanged.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CapacityHoldTransitionResult"

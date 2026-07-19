@@ -1,0 +1,697 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orderpro.example/schemas/local-delivery-quote-v4.schema.json",
+  "title": "OrderPro Local Delivery Quote V4",
+  "description": "Successful HTTP 200 result from POST /api/v1/local-delivery/quote. eligible represents published-zone geographic eligibility; bookable represents whether a selected-store slot can be held now. The result is either a priced offer for one of the five supported ZIPs or the exact CONTACT_STORE outcome for a valid Manhattan address in another ZIP.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/offer"
+    },
+    {
+      "$ref": "#/$defs/contactStore"
+    }
+  ],
+  "$defs": {
+    "persistedId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$"
+    },
+    "correlationId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$"
+    },
+    "externalLocationId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"
+    },
+    "routingProvider": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "postalCode": {
+      "type": "string",
+      "pattern": "^[0-9]{5}$"
+    },
+    "address": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "line1",
+        "line2",
+        "city",
+        "state",
+        "postalCode",
+        "country",
+        "borough"
+      ],
+      "properties": {
+        "line1": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "line2": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "city": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "state": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2
+        },
+        "postalCode": {
+          "$ref": "#/$defs/postalCode"
+        },
+        "country": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2
+        },
+        "borough": {
+          "const": "Manhattan"
+        }
+      }
+    },
+    "coordinates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      }
+    },
+    "candidateRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locationId",
+        "locationPriority",
+        "walkingDistanceFeet",
+        "walkingDurationSeconds",
+        "routingProvider"
+      ],
+      "properties": {
+        "locationId": {
+          "enum": [
+            "third_avenue",
+            "east_86th_street"
+          ]
+        },
+        "locationPriority": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "walkingDistanceFeet": {
+          "type": "number",
+          "minimum": 0,
+          "multipleOf": 0.01
+        },
+        "walkingDurationSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "routingProvider": { "$ref": "#/$defs/routingProvider" }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slotId",
+        "locationId",
+        "startsAt",
+        "endsAt",
+        "remainingCapacitySeconds"
+      ],
+      "properties": {
+        "slotId": {
+          "$ref": "#/$defs/persistedId"
+        },
+        "locationId": {
+          "enum": [
+            "third_avenue",
+            "east_86th_street"
+          ]
+        },
+        "startsAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endsAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "remainingCapacitySeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "tierPair": {
+      "oneOf": [
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "free-local" },
+            "feeCents": { "const": 0 },
+            "walkingDistanceFeet": { "minimum": 0, "maximum": 1200 }
+          }
+        },
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "base-delivery" },
+            "feeCents": { "const": 1000 },
+            "walkingDistanceFeet": { "exclusiveMinimum": 1200, "maximum": 2200 }
+          }
+        },
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "extended-12" },
+            "feeCents": { "const": 1200 },
+            "walkingDistanceFeet": { "exclusiveMinimum": 2200, "maximum": 2700 }
+          }
+        },
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "extended-14" },
+            "feeCents": { "const": 1400 },
+            "walkingDistanceFeet": { "exclusiveMinimum": 2700, "maximum": 2950 }
+          }
+        },
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "extended-15" },
+            "feeCents": { "const": 1500 },
+            "walkingDistanceFeet": { "exclusiveMinimum": 2950, "maximum": 3250 }
+          }
+        },
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "extended-17" },
+            "feeCents": { "const": 1700 },
+            "walkingDistanceFeet": { "exclusiveMinimum": 3250, "maximum": 3500 }
+          }
+        },
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "extended-19" },
+            "feeCents": { "const": 1900 },
+            "walkingDistanceFeet": { "exclusiveMinimum": 3500, "maximum": 3750 }
+          }
+        },
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "extended-21" },
+            "feeCents": { "const": 2100 },
+            "walkingDistanceFeet": { "exclusiveMinimum": 3750, "maximum": 4000 }
+          }
+        },
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "extended-23" },
+            "feeCents": { "const": 2300 },
+            "walkingDistanceFeet": { "exclusiveMinimum": 4000, "maximum": 4250 }
+          }
+        },
+        {
+          "required": ["feeTierId", "feeCents"],
+          "properties": {
+            "feeTierId": { "const": "whole-zone-25" },
+            "feeCents": { "const": 2500 },
+            "walkingDistanceFeet": { "exclusiveMinimum": 4250 }
+          }
+        }
+      ]
+    },
+    "offer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quoteId",
+        "replayed",
+        "eligible",
+        "bookable",
+        "reasonCode",
+        "normalizedAddress",
+        "coordinates",
+        "postalCode",
+        "selectedLocationId",
+        "selectedLocationName",
+        "assignmentRule",
+        "walkingDistanceFeet",
+        "walkingDurationSeconds",
+        "roundTripDistanceFeet",
+        "estimatedRoundTripDurationSeconds",
+        "requiredCapacitySeconds",
+        "feeCents",
+        "currency",
+        "feeTierId",
+        "candidateRoutes",
+        "availableSlots",
+        "inventoryStatus",
+        "transferEarliestReadyAt",
+        "inventoryOwnerLocationIds",
+        "inventoryNodeIds",
+        "zoneVersionId",
+        "feePolicyVersionId",
+        "routingProvider",
+        "routingProfile",
+        "routeCalculatedAt",
+        "expiresAt",
+        "correlationId"
+      ],
+      "properties": {
+        "quoteId": { "$ref": "#/$defs/persistedId" },
+        "replayed": { "type": "boolean" },
+        "eligible": { "const": true },
+        "bookable": { "type": "boolean" },
+        "reasonCode": {
+          "enum": [
+            "ELIGIBLE",
+            "NO_SLOTS_FOR_SELECTED_LOCATION",
+            "TRANSFER_REQUIRED"
+          ]
+        },
+        "normalizedAddress": { "$ref": "#/$defs/address" },
+        "coordinates": { "$ref": "#/$defs/coordinates" },
+        "postalCode": {
+          "enum": ["10021", "10065", "10075", "10028", "10128"]
+        },
+        "selectedLocationId": {
+          "enum": ["third_avenue", "east_86th_street"]
+        },
+        "selectedLocationName": {
+          "enum": ["3rd Avenue Store", "86th Street Store"]
+        },
+        "assignmentRule": {
+          "enum": ["FIXED_POSTAL_ZONE", "NEAREST_WALKING_ROUTE"]
+        },
+        "walkingDistanceFeet": {
+          "type": "number",
+          "minimum": 0,
+          "multipleOf": 0.01
+        },
+        "walkingDurationSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "roundTripDistanceFeet": {
+          "type": "number",
+          "minimum": 0,
+          "multipleOf": 0.01
+        },
+        "estimatedRoundTripDurationSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "requiredCapacitySeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "feeCents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2500
+        },
+        "currency": { "const": "USD" },
+        "feeTierId": {
+          "enum": [
+            "free-local",
+            "base-delivery",
+            "extended-12",
+            "extended-14",
+            "extended-15",
+            "extended-17",
+            "extended-19",
+            "extended-21",
+            "extended-23",
+            "whole-zone-25"
+          ]
+        },
+        "candidateRoutes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/candidateRoute" },
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true
+        },
+        "availableSlots": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slot" },
+          "uniqueItems": true
+        },
+        "inventoryStatus": {
+          "enum": ["READY", "TRANSFER_REQUIRED"]
+        },
+        "transferEarliestReadyAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "inventoryOwnerLocationIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/externalLocationId" },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "inventoryNodeIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/externalLocationId" },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "zoneVersionId": {
+          "const": "upper-east-side-walking-zones-v1"
+        },
+        "feePolicyVersionId": {
+          "const": "walking-route-distance-v4-base-10-2026-07-16"
+        },
+        "routingProvider": { "$ref": "#/$defs/routingProvider" },
+        "routingProfile": { "const": "walking" },
+        "routeCalculatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "correlationId": { "$ref": "#/$defs/correlationId" }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/tierPair" },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "selectedLocationId": { "const": "third_avenue" },
+                "selectedLocationName": { "const": "3rd Avenue Store" }
+              }
+            },
+            {
+              "properties": {
+                "selectedLocationId": { "const": "east_86th_street" },
+                "selectedLocationName": { "const": "86th Street Store" }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "assignmentRule": { "const": "FIXED_POSTAL_ZONE" },
+                "postalCode": { "enum": ["10021", "10065"] },
+                "selectedLocationId": { "const": "third_avenue" },
+                "candidateRoutes": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "items": {
+                    "properties": { "locationId": { "const": "third_avenue" } }
+                  }
+                }
+              }
+            },
+            {
+              "properties": {
+                "assignmentRule": { "const": "FIXED_POSTAL_ZONE" },
+                "postalCode": { "enum": ["10028", "10128"] },
+                "selectedLocationId": { "const": "east_86th_street" },
+                "candidateRoutes": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "items": {
+                    "properties": { "locationId": { "const": "east_86th_street" } }
+                  }
+                }
+              }
+            },
+            {
+              "properties": {
+                "assignmentRule": { "const": "NEAREST_WALKING_ROUTE" },
+                "postalCode": { "const": "10075" },
+                "candidateRoutes": {
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "allOf": [
+                    {
+                      "contains": {
+                        "properties": { "locationId": { "const": "third_avenue" } },
+                        "required": ["locationId"]
+                      },
+                      "minContains": 1,
+                      "maxContains": 1
+                    },
+                    {
+                      "contains": {
+                        "properties": { "locationId": { "const": "east_86th_street" } },
+                        "required": ["locationId"]
+                      },
+                      "minContains": 1,
+                      "maxContains": 1
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "reasonCode": { "const": "ELIGIBLE" },
+                "bookable": { "const": true },
+                "inventoryStatus": { "const": "READY" }
+              },
+              "required": ["reasonCode", "bookable", "inventoryStatus"]
+            },
+            {
+              "properties": {
+                "reasonCode": { "const": "TRANSFER_REQUIRED" },
+                "bookable": { "const": true },
+                "inventoryStatus": { "const": "TRANSFER_REQUIRED" }
+              },
+              "required": ["reasonCode", "bookable", "inventoryStatus"]
+            },
+            {
+              "properties": {
+                "reasonCode": { "const": "NO_SLOTS_FOR_SELECTED_LOCATION" },
+                "bookable": { "const": false },
+                "inventoryStatus": {
+                  "enum": ["READY", "TRANSFER_REQUIRED"]
+                }
+              },
+              "required": ["reasonCode", "bookable", "inventoryStatus"]
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": { "reasonCode": { "const": "NO_SLOTS_FOR_SELECTED_LOCATION" } },
+            "required": ["reasonCode"]
+          },
+          "then": {
+            "properties": {
+              "bookable": { "const": false },
+              "availableSlots": { "maxItems": 0 }
+            }
+          },
+          "else": {
+            "properties": {
+              "bookable": { "const": true },
+              "availableSlots": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "inventoryStatus": { "const": "READY" } },
+            "required": ["inventoryStatus"]
+          },
+          "then": {
+            "properties": { "transferEarliestReadyAt": { "type": "null" } }
+          },
+          "else": {
+            "properties": { "transferEarliestReadyAt": { "type": "string", "format": "date-time" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "reasonCode": { "const": "TRANSFER_REQUIRED" } },
+            "required": ["reasonCode"]
+          },
+          "then": {
+            "properties": { "inventoryStatus": { "const": "TRANSFER_REQUIRED" } }
+          }
+        }
+      ]
+    },
+    "contactStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quoteId",
+        "replayed",
+        "eligible",
+        "bookable",
+        "reasonCode",
+        "storefrontMessage",
+        "normalizedAddress",
+        "coordinates",
+        "postalCode",
+        "correlationId",
+        "expiresAt"
+      ],
+      "properties": {
+        "quoteId": { "$ref": "#/$defs/persistedId" },
+        "replayed": { "type": "boolean" },
+        "eligible": { "const": false },
+        "bookable": { "const": false },
+        "reasonCode": { "const": "CONTACT_STORE" },
+        "storefrontMessage": { "const": "Contact store" },
+        "normalizedAddress": { "$ref": "#/$defs/address" },
+        "coordinates": { "$ref": "#/$defs/coordinates" },
+        "postalCode": {
+          "allOf": [
+            { "$ref": "#/$defs/postalCode" },
+            {
+              "not": {
+                "enum": ["10021", "10065", "10075", "10028", "10128"]
+              }
+            }
+          ]
+        },
+        "correlationId": { "$ref": "#/$defs/correlationId" },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "quoteId": "quote-10075-001",
+      "replayed": false,
+      "eligible": true,
+      "bookable": true,
+      "reasonCode": "ELIGIBLE",
+      "normalizedAddress": {
+        "line1": "500 E 80th St",
+        "line2": null,
+        "city": "New York",
+        "state": "NY",
+        "postalCode": "10075",
+        "country": "US",
+        "borough": "Manhattan"
+      },
+      "coordinates": {
+        "latitude": 40.775,
+        "longitude": -73.95
+      },
+      "postalCode": "10075",
+      "selectedLocationId": "third_avenue",
+      "selectedLocationName": "3rd Avenue Store",
+      "assignmentRule": "NEAREST_WALKING_ROUTE",
+      "walkingDistanceFeet": 4261,
+      "walkingDurationSeconds": 1038,
+      "roundTripDistanceFeet": 8522,
+      "estimatedRoundTripDurationSeconds": 2076,
+      "requiredCapacitySeconds": 2376,
+      "feeCents": 2500,
+      "currency": "USD",
+      "feeTierId": "whole-zone-25",
+      "candidateRoutes": [
+        {
+          "locationId": "third_avenue",
+          "locationPriority": 1,
+          "walkingDistanceFeet": 4261,
+          "walkingDurationSeconds": 1038,
+          "routingProvider": "approved-walking-router"
+        },
+        {
+          "locationId": "east_86th_street",
+          "locationPriority": 2,
+          "walkingDistanceFeet": 4490,
+          "walkingDurationSeconds": 1080,
+          "routingProvider": "approved-walking-router"
+        }
+      ],
+      "availableSlots": [
+        {
+          "slotId": "slot-20260720-1400",
+          "locationId": "third_avenue",
+          "startsAt": "2026-07-20T14:00:00-04:00",
+          "endsAt": "2026-07-20T15:00:00-04:00",
+          "remainingCapacitySeconds": 12000
+        }
+      ],
+      "inventoryStatus": "READY",
+      "transferEarliestReadyAt": null,
+      "inventoryOwnerLocationIds": ["third_avenue"],
+      "inventoryNodeIds": ["third_avenue"],
+      "zoneVersionId": "upper-east-side-walking-zones-v1",
+      "feePolicyVersionId": "walking-route-distance-v4-base-10-2026-07-16",
+      "routingProvider": "approved-walking-router",
+      "routingProfile": "walking",
+      "routeCalculatedAt": "2026-07-16T16:00:00Z",
+      "expiresAt": "2026-07-16T16:15:00Z",
+      "correlationId": "corr-local-delivery-001"
+    },
+    {
+      "quoteId": "quote-contact-001",
+      "replayed": false,
+      "eligible": false,
+      "bookable": false,
+      "reasonCode": "CONTACT_STORE",
+      "storefrontMessage": "Contact store",
+      "normalizedAddress": {
+        "line1": "500 Madison Ave",
+        "line2": null,
+        "city": "New York",
+        "state": "NY",
+        "postalCode": "10022",
+        "country": "US",
+        "borough": "Manhattan"
+      },
+      "coordinates": {
+        "latitude": 40.758,
+        "longitude": -73.97
+      },
+      "postalCode": "10022",
+      "correlationId": "corr-contact-store-001",
+      "expiresAt": "2026-07-16T16:05:00Z"
+    }
+  ]
+}

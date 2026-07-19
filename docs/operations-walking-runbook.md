@@ -10,7 +10,7 @@ This runbook governs administrative configuration, publication, rollback and int
 - Operations admins can view and manage drafts but cannot publish or roll back.
 - Inventory controllers, store managers, warehouse managers and auditors have read-only visibility.
 - Store and warehouse staff do not receive the configuration module in the initial policy.
-- M2M clients use independent scopes and never a human session.
+- M2M clients use independent Auth0 STAGING identities and scopes and never a human session. Follow the [safe Auth0 onboarding route](auth0-m2m-staging-setup.md); never collect a Client Secret in OrderPro.
 
 For production publication, use a prepared-by/reviewed-by process even where one Owner technically holds both permissions. The approver must not infer readiness from a green UI badge alone; retain validation evidence and the pending-decision checklist.
 
@@ -123,6 +123,25 @@ Never publish by editing a database row, changing a status in a database console
 
 Quote addresses and coordinates are customer data. Do not include them in ordinary audit events or application logs.
 
+## Auth0 verifier and JWKS operation
+
+- The implemented STAGING verifier accepts Auth0's pilot header `typ=at+jwt` only, uses RS256, and never follows `jku`, `jwk` or `x5u` from a token.
+- The trusted JWKS URL is derived exactly from the configured issuer. Keys are selected by `kid`; an unknown `kid` is `401 UNAUTHORIZED`, while network, timeout, HTTP, JSON or malformed-JWKS failures are temporary `503` authentication unavailability.
+- Remote JWKS requests time out after 5 seconds. A successful set is fresh for 10 minutes and new fetches cool down for 30 seconds. These are STAGING pilot values that require explicit operational acceptance before activation.
+- The 10-minute freshness window supports normal key rotation but may continue trusting a removed key during that window. For suspected key compromise, lock the API immediately rather than relying only on JWKS removal.
+- A normal rotation must publish the new public key before Auth0 begins issuing its `kid`, retain overlap long enough for issued tokens, and verify both old/new paths in STAGING before retiring the old key.
+- Never store or attach raw access tokens to logs, alerts or the evidence package. Correlate using OrderPro client key, correlation ID and sanitized outcome only.
+
+### One-time STAGING token certification
+
+1. Confirm RFC 9068, RS256, 3600 seconds and the exact two Local Delivery scopes in Auth0.
+2. Review and commit the certification code; require a completely clean Git tree before generating a token.
+3. Generate the token in the authorized consumer/Auth0 Test flow; never move the Client Secret into OrderPro.
+4. Run `npm run m2m:certify:staging` and paste only the token into the hidden prompt. Clear the current clipboard and remove the token from Windows **Win+V** history if enabled.
+5. Require `CERTIFIED_PENDING_APPROVAL`, the exact audience, source commit, audit event ID and evidence digest. Store only that sanitized output in the change record.
+6. Confirm client, credential and grants remain `PENDING_VERIFICATION`, M2M mode remains `DISABLED`, the V4 gate remains false and all locked routes still return 503.
+7. Treat registry activation and runtime enablement as later, separate approvals. Certification alone authorizes nothing.
+
 ## Rollback
 
 Rollback creates a new publication from a historical snapshot. It never mutates or reactivates the old row in place.
@@ -210,7 +229,7 @@ Never retain access tokens, signing secrets, full authorization headers or unnec
 - Complete approved general fees for both stores.
 - Slot schedules, capacity rules and hold lifetime.
 - Geocoding/routing providers and map/topology tooling.
-- M2M issuer/clients/scopes and rate limits.
+- End-to-end Auth0 token certification, approval/activation of the pending durable client registry/grants and rate limits.
 - Webhook subscriber, signing secrets, retry/dead-letter ownership.
 - Store-backed pickup schedule, cutoff, holiday calendar and safety stock.
 - Product/lots synchronization and inventory mutation certification.

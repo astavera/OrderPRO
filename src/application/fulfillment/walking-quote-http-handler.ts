@@ -5,6 +5,11 @@ import {
   type EvaluateWalkingDeliveryQuoteCommand,
   type WalkingQuoteResult,
 } from "./evaluate-walking-delivery-quote";
+import type {
+  MachineAuthenticationResult,
+  MachineAuthenticator,
+} from "../m2m/machine-authentication";
+import type { MachineClientPrincipal } from "../m2m/machine-client-registry";
 
 const requiredScopes = ["walking-zones:read", "availability:read"] as const;
 const stableId = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
@@ -15,25 +20,20 @@ const requestSchema = z.object({
   subtotalCents: z.number().int().nonnegative(),
 }).strict();
 
-export type WalkingQuoteMachinePrincipal = {
-  readonly clientId: string;
-  readonly environment: "STAGING" | "PRODUCTION";
-  readonly scopes: readonly string[];
-};
+export type WalkingQuoteMachinePrincipal = MachineClientPrincipal;
 
-export type WalkingQuoteAuthenticationResult =
-  | { readonly authenticated: true; readonly principal: WalkingQuoteMachinePrincipal }
-  | {
-      readonly authenticated: false;
-      readonly status: 401 | 503;
-      readonly code: "UNAUTHORIZED" | "M2M_AUTH_NOT_CONFIGURED";
-      readonly message: string;
-    };
+export type WalkingQuoteAuthenticationResult = MachineAuthenticationResult;
 
 export type WalkingQuoteHttpDependencies = {
-  authenticate(request: Request): Promise<WalkingQuoteAuthenticationResult>;
+  authenticate: MachineAuthenticator;
   evaluate(command: EvaluateWalkingDeliveryQuoteCommand): Promise<WalkingQuoteResult>;
 };
+
+const publicAuthenticationMessages = {
+  UNAUTHORIZED: "The machine credential is invalid.",
+  M2M_AUTH_NOT_CONFIGURED:
+    "Walking quote evaluation is locked until machine authentication is configured.",
+} as const;
 
 function requestCorrelationId(request: Request) {
   const supplied = request.headers.get("x-correlation-id")?.trim();
@@ -76,9 +76,24 @@ export function createWalkingQuotePostHandler(dependencies: WalkingQuoteHttpDepe
   return async function POST(request: Request) {
     const correlation = requestCorrelationId(request);
     const correlationId = correlation.value;
-    const authentication = await dependencies.authenticate(request);
+    let authentication: WalkingQuoteAuthenticationResult;
+    try {
+      authentication = await dependencies.authenticate(request);
+    } catch {
+      return jsonError(
+        503,
+        "M2M_AUTH_NOT_CONFIGURED",
+        publicAuthenticationMessages.M2M_AUTH_NOT_CONFIGURED,
+        correlationId,
+      );
+    }
     if (!authentication.authenticated) {
-      return jsonError(authentication.status, authentication.code, authentication.message, correlationId);
+      return jsonError(
+        authentication.code === "UNAUTHORIZED" ? 401 : 503,
+        authentication.code,
+        publicAuthenticationMessages[authentication.code],
+        correlationId,
+      );
     }
 
     const grantedScopes = new Set(authentication.principal.scopes);

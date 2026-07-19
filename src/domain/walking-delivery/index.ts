@@ -2,6 +2,7 @@ export { canonicalJson, stableSha256Digest } from "./canonical-json";
 export { evaluateWalkingDelivery } from "./evaluator";
 export { isValidWalkingPosition, pointInWalkingGeometry, validateWalkingGeometry } from "./geometry";
 export { validateWalkingZoneConfiguration, validateWalkingZoneConfigurations } from "./validation";
+export * from "./local-walking-delivery-v4";
 export {
   EIGHTY_SIXTH_STREET_LOCATION_ID,
   evaluateWalkingRouteDistanceStandard,

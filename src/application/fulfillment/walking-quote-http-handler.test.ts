@@ -21,6 +21,34 @@ const validBody = {
 };
 
 describe("walking quote HTTP handler", () => {
+  it("never reflects verifier failures or thrown secrets", async () => {
+    const secret = "Bearer walking-token-must-never-escape";
+    const evaluate = vi.fn();
+    const rejected = createWalkingQuotePostHandler({
+      async authenticate() {
+        return { authenticated: false, code: "UNAUTHORIZED" } as const;
+      },
+      evaluate,
+    });
+    const unavailable = createWalkingQuotePostHandler({
+      async authenticate() {
+        throw new Error(`${secret}; jwks timeout`);
+      },
+      evaluate,
+    });
+
+    const rejectedResponse = await rejected(request(validBody));
+    const unavailableResponse = await unavailable(request(validBody));
+    expect(rejectedResponse.status).toBe(401);
+    expect(unavailableResponse.status).toBe(503);
+    const rejectedBody = await rejectedResponse.text();
+    const unavailableBody = await unavailableResponse.text();
+    expect(rejectedBody).not.toContain(secret);
+    expect(unavailableBody).not.toContain(secret);
+    expect(unavailableBody).not.toContain("jwks");
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
   it("requires both read scopes before parsing customer data", async () => {
     const evaluate = vi.fn();
     const handler = createWalkingQuotePostHandler({

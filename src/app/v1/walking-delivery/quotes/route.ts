@@ -8,9 +8,7 @@ export const POST = createWalkingQuotePostHandler({
   async authenticate() {
     return {
       authenticated: false,
-      status: 503,
       code: "M2M_AUTH_NOT_CONFIGURED",
-      message: "Walking quote evaluation is locked until machine authentication is configured.",
     } as const;
   },
   async evaluate() {
