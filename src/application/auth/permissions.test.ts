@@ -6,6 +6,12 @@ describe("RBAC permissions", () => {
   it("prevents store staff from administering", () => expect(hasPermission(["STORE_STAFF"], "admin.manage")).toBe(false));
   it("keeps auditors read-only", () => expect(hasPermission(["AUDITOR"], "boxes.mutate")).toBe(false));
 
+  it("reserves STAGING machine approval for Owners", () => {
+    expect(hasPermission(["OWNER"], "m2m.approve")).toBe(true);
+    expect(hasPermission(["OPERATIONS_ADMIN"], "m2m.approve")).toBe(false);
+    expect(hasPermission(["AUDITOR"], "m2m.approve")).toBe(false);
+  });
+
   it("allows owners to manage the complete fulfillment lifecycle", () => {
     const permissions: Permission[] = [
       "fulfillment.view",

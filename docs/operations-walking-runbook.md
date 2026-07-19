@@ -145,9 +145,25 @@ Quote addresses and coordinates are customer data. Do not include them in ordina
 ### Audited M2M approval without activation
 
 After `CERTIFIED_PENDING_APPROVAL`, deploy the reviewed approval-registry
-migration and use `scripts/approve-auth0-m2m-staging.ps1` with only an active
-OWNER UUID, a 10–500 character non-secret reason, the certification audit event
-ID and its evidence digest. Run it only from its committed, clean Git tree. A
+ migration. The normal approval path is `/operations/admin/m2m`: an active
+Supabase-authenticated Owner reviews the exact certification and submits a
+10–500 character non-secret reason plus the exact no-activation confirmation.
+The action derives the actor from the session, revalidates the pending snapshot
+inside a serializable transaction and calls the audited database function.
+
+Keep `ORDERPRO_M2M_STAGING_APPROVAL_UI_ENABLED=false` by default. A reviewed
+STAGING release may set it temporarily to `true` only when CI supplies the exact
+release commit, release tree and certified verifier digest through the
+`ORDERPRO_RELEASE_*` server-only variables. CI must also bind the exact certified
+commit/tree and attest that the certified commit is an ancestor of the release.
+Production build, STAGING runtime, disabled M2M/V4 gates, canonical Auth0 public
+configuration, executable SECURITY DEFINER RPC, RLS, append-only guards and all
+three no-activation triggers are mandatory. Local development stays read-only.
+
+The PowerShell wrapper remains a contingency path and may receive only an active
+OWNER UUID, a non-secret reason, the certification audit event ID and its
+evidence digest. Run it only from its committed, clean Git tree and with a signed
+change record binding the privileged operator to the Owner decision. A
 successful result must be `APPROVED_PENDING_ACTIVATION` and must still report the
 client, credential and grants as `PENDING_VERIFICATION`, M2M mode as `DISABLED`
 and the Local Delivery V4 API gate as false.

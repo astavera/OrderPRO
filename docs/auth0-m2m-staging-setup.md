@@ -139,6 +139,48 @@ cliente, la credencial y los dos grants en `PENDING_VERIFICATION`; los tres
 triggers contra `ACTIVE`, `ORDERPRO_M2M_AUTH_MODE=DISABLED` y
 `ORDERPRO_LOCAL_DELIVERY_V4_API_ENABLED=false` permanecen intactos.
 
+### Ruta recomendada: sesión humana autenticada
+
+OrderPRO expone `/operations/admin/m2m` dentro del panel operativo. La página y
+su Server Action vuelven a validar la sesión Supabase y exigen el permiso
+`m2m.approve`, que pertenece únicamente al rol `OWNER`. El actor se deriva de la
+sesión y de `User.subject`; el navegador nunca envía un UUID de usuario, cliente,
+scope, estado, commit ni árbol como autoridad.
+
+El formulario permanece bloqueado de forma predeterminada. El despliegue
+STAGING debe aportar estas atestaciones server-only desde CI:
+
+```dotenv
+ORDERPRO_M2M_STAGING_APPROVAL_UI_ENABLED="false"
+ORDERPRO_RELEASE_COMMIT_SHA="<commit desplegado>"
+ORDERPRO_RELEASE_TREE_SHA="<árbol del commit desplegado>"
+ORDERPRO_RELEASE_M2M_CERTIFIED_COMMIT_SHA="<commit de la certificación>"
+ORDERPRO_RELEASE_M2M_CERTIFIED_TREE_SHA="<árbol de la certificación>"
+ORDERPRO_RELEASE_M2M_CERTIFICATION_ANCESTOR_CONFIRMED="true"
+ORDERPRO_RELEASE_M2M_VERIFIER_DIGEST_SHA256="<digest certificado>"
+```
+
+Antes de establecer temporalmente el gate UI en `true`, CI debe comprobar que
+el commit certificado es ancestro del release, que ambos árboles corresponden a
+sus commits y que el digest del verificador coincide con la evidencia
+`m2m.client.token_certified`. La acción solo funciona con `NODE_ENV=production`,
+`ORDERPRO_RUNTIME_ENVIRONMENT=STAGING`, M2M en `DISABLED`, la API V4 en `false`,
+configuración Auth0 canónica, cero secretos/tokens heredados, RLS, función
+`SECURITY DEFINER` ejecutable, guards append-only y los tres triggers de no
+activación intactos. En `next dev`/localhost se puede revisar la pantalla,
+pero no registrar la decisión.
+
+El Owner revisa el snapshot y la evidencia, escribe una razón de 10–500
+caracteres sin secretos y confirma exactamente
+`APPROVE STOREFRONT-STAGING WITHOUT ACTIVATION`. La acción relee todo dentro de
+una transacción serializable y llama a la función SQL auditada. El resultado
+válido es exclusivamente `APPROVED_PENDING_ACTIVATION`. Después de registrar la
+decisión, vuelve a dejar el gate UI en `false`; esto tampoco activa el cliente.
+
+La ruta web autenticada reemplaza el UUID manual como procedimiento normal. El
+wrapper CLI siguiente queda como herramienta operativa de contingencia y sigue
+requiriendo un change record que vincule al Owner con el operador privilegiado.
+
 El aprobador debe ser un usuario activo con rol `OWNER`. Desde un commit revisado
 y con el árbol Git completamente limpio, ejecuta el wrapper directamente; no se
 agrega un alias a `package.json` porque ese archivo forma parte del digest que ya
