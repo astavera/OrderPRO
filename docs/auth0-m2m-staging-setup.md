@@ -1,6 +1,6 @@
 # Auth0 M2M STAGING: datos de incorporación
 
-Estado: verificador y registro implementados en preparación segura. Esta configuración no activa Local Delivery V4 ni crea una ruta pública para recibir credenciales.
+Estado: la configuración pública, el registro pendiente y la certificación real del token de STAGING ya están completos. La aprobación auditable está preparada en código, pero su migración no se ha desplegado ni la decisión se ha registrado. El cliente y los dos gates continúan cerrados.
 
 ## Qué dato necesitamos realmente
 
@@ -52,7 +52,7 @@ El Client Secret pertenece exclusivamente al servidor consumidor —por ejemplo,
 
 ## Dónde quedará en OrderPro
 
-La plantilla server-only ya está preparada en `.env.local`. Cuando recibamos y validemos el Domain y el Audience, se completarán así:
+La configuración server-only está en `.env.local` con este formato. Los valores reales no se copian a esta guía:
 
 ```env
 ORDERPRO_M2M_AUTH_MODE="DISABLED"
@@ -64,7 +64,7 @@ ORDERPRO_M2M_ALLOWED_ALGORITHM="RS256"
 
 ## Estado del onboarding
 
-El dominio, audience y Client ID públicos del piloto ya fueron recibidos. El Client ID se registra mediante `npm run m2m:onboard:staging` como credencial externa de la identidad interna `storefront-staging`, nunca dentro de una allowlist de `.env` ni de una migración versionada. El cliente, la credencial y sus grants nacen en `PENDING_VERIFICATION`; un bloqueo de base de datos impide convertirlos a `ACTIVE` hasta una futura aprobación auditada.
+El dominio, audience y Client ID públicos del piloto ya fueron recibidos. El Client ID se registra mediante `npm run m2m:onboard:staging` como credencial externa de la identidad interna `storefront-staging`, nunca dentro de una allowlist de `.env` ni de una migración versionada. El cliente, la credencial y sus grants permanecen en `PENDING_VERIFICATION`; un bloqueo de base de datos impide convertirlos a `ACTIVE` incluso después de registrar una aprobación.
 
 El comando acepta únicamente `--issuer` y `--client-id`. No existe una opción para Client Secret:
 
@@ -74,13 +74,13 @@ npm run m2m:onboard:staging -- --issuer="https://<tenant>.us.auth0.com/" --clien
 
 Los grants previstos son exactamente `local-delivery:quote` y `local-delivery:holds`. El propietario queda pendiente en vez de inventar una persona, y el runtime continúa bloqueado aunque el registro se haya creado correctamente.
 
-El modo permanece `DISABLED` durante esta preparación. El Client ID no se guardará como secreto ni como variable temporal: se incorporará al registro durable de clientes M2M con una identidad interna estable, propietario, entorno, estado y permisos auditables.
+El modo permanece `DISABLED` durante esta preparación. El Client ID no se guardó como secreto ni como allowlist de entorno: quedó asociado al registro durable `storefront-staging`; el propietario, el estado activo y la autorización continúan pendientes.
 
 La validación de configuración está en `src/infrastructure/m2m/auth0-config.ts`. Rechaza de forma cerrada valores incompletos, dominios no canónicos, cualquier audience distinto de `https://api.orderpro.internal/local-delivery/staging`, endpoints JWKS distintos al issuer, algoritmos diferentes a RS256 y cualquier entorno que no sea STAGING.
 
 El autenticador RFC 9068 ya está implementado en `src/infrastructure/m2m/auth0-machine-authenticator.ts`. Verifica la firma contra el JWKS fijo del tenant, selecciona llaves por `kid`, exige issuer/audience/`client_id`/subject/expiración/scopes exactos y después consulta el registro durable. Una firma válida por sí sola no autoriza: cliente, credencial y grant también deben estar activos. En este momento continúan pendientes, el modo sigue `DISABLED` y el runtime permanece cerrado.
 
-Antes de activarlo falta obtener un token de prueba desde el servidor consumidor, ejecutar la certificación de extremo a extremo y aprobar de forma auditada el cliente y sus grants. Ese token y el Client Secret no deben copiarse a documentación, commits, capturas ni mensajes; la prueba se ejecutará desde el entorno seguro que ya posea el secreto.
+La certificación de extremo a extremo ya produjo evidencia sanitizada `CERTIFIED_PENDING_APPROVAL`; no se necesita otro token para preparar la decisión humana. Antes de cualquier activación todavía falta revisar y desplegar el registro de aprobaciones, registrar la decisión de un `OWNER` y crear un artefacto posterior de activación. El token y el Client Secret no deben copiarse a documentación, commits, capturas ni mensajes.
 
 ## Certificación real sin activar el API
 
@@ -129,3 +129,74 @@ Una certificación correcta devuelve solamente evidencia no sensible similar a:
 El certificador usa el mismo verificador productivo y el JWKS real. También demuestra que el registro productivo continúa rechazando al cliente pendiente. La evidencia incluye commit, árbol Git y digest del verificador, comprobados antes y después de validar el token. Si todo coincide, actualiza únicamente `MachineCredential.verifiedAt`, incrementa su versión y crea `m2m.client.token_certified`; el cliente, la credencial, ambos grants, `ORDERPRO_M2M_AUTH_MODE` y el runtime siguen cerrados.
 
 Los errores son deliberadamente sanitizados. `UNSAFE_CERTIFICATION_ENVIRONMENT` indica configuración insegura, código sin commit o un árbol Git sucio. `TOKEN_VERIFICATION_FAILED` indica que firma, issuer, audience, perfil, duración, Client ID o scopes no coinciden. `PENDING_REGISTRATION_NOT_READY` indica que el registro ya cambió o no tiene exactamente el estado esperado. Ningún fallo guarda evidencia ni activa permisos.
+
+## Aprobación humana posterior, todavía sin activar
+
+`CERTIFIED_PENDING_APPROVAL` habilita una decisión humana auditable, no el
+tráfico. La aprobación se registra únicamente después de desplegar la migración
+que crea `record_staging_machine_authorization_approval`. Esa función mantiene el
+cliente, la credencial y los dos grants en `PENDING_VERIFICATION`; los tres
+triggers contra `ACTIVE`, `ORDERPRO_M2M_AUTH_MODE=DISABLED` y
+`ORDERPRO_LOCAL_DELIVERY_V4_API_ENABLED=false` permanecen intactos.
+
+El aprobador debe ser un usuario activo con rol `OWNER`. Desde un commit revisado
+y con el árbol Git completamente limpio, ejecuta el wrapper directamente; no se
+agrega un alias a `package.json` porque ese archivo forma parte del digest que ya
+fue certificado:
+
+> **Límite de confianza:** este wrapper comprueba que `ActorUserId` pertenece a
+> un `OWNER` activo, pero una conexión privilegiada a PostgreSQL no demuestra por
+> sí sola que esa persona inició sesión o ejecutó el comando. Desplegar la
+> migración no crea ninguna decisión. No ejecutes el wrapper hasta que exista un
+> change record aprobado por ese Owner y un control operativo que vincule al
+> operador privilegiado con esa decisión, o hasta sustituirlo por una ruta con
+> sesión humana Supabase autenticada. El `actorId` del audit es una atribución
+> operativa; no es una firma de no repudio.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File scripts/approve-auth0-m2m-staging.ps1 `
+  -ActorUserId "<owner-user-uuid>" `
+  -Reason "Approved for the separate STAGING activation review." `
+  -CertificationAuditEventId "<auditEventId de CERTIFIED_PENDING_APPROVAL>" `
+  -EvidenceDigestSha256 "<evidenceDigestSha256 de CERTIFIED_PENDING_APPROVAL>"
+```
+
+Desde **CMD**, usa la misma orden en una sola línea (sin los acentos graves de
+continuación de PowerShell):
+
+```bat
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\approve-auth0-m2m-staging.ps1 -ActorUserId "<owner-user-uuid>" -Reason "Approved for the separate STAGING activation review." -CertificationAuditEventId "<auditEventId>" -EvidenceDigestSha256 "<evidenceDigestSha256>"
+```
+
+Estos cuatro valores son metadatos no secretos. La razón debe tener entre 10 y
+500 caracteres y no debe contener tokens, secretos ni encabezados Authorization.
+El comando no acepta argumentos adicionales, Client Secret, access token,
+Management API token, Client ID ni cambios de flags. El wrapper lee solamente la
+configuración server-side requerida, crea un entorno hijo allowlisted y fija el
+commit y árbol esperados. El hijo vuelve a comprobar Git, el digest del verificador,
+el audit de certificación, el OWNER activo y el snapshot pendiente exacto dentro
+de una transacción serializable; repite Git y digest antes de confirmar.
+
+Una respuesta correcta es deliberadamente explícita sobre los bloqueos:
+
+```json
+{
+  "result": "APPROVED_PENDING_ACTIVATION",
+  "clientKey": "storefront-staging",
+  "environment": "STAGING",
+  "clientStatus": "PENDING_VERIFICATION",
+  "credentialStatus": "PENDING_VERIFICATION",
+  "grantStatus": "PENDING_VERIFICATION",
+  "m2mAuthMode": "DISABLED",
+  "localDeliveryV4ApiEnabled": false,
+  "activationBlockerCount": 3
+}
+```
+
+Conserva los IDs y digests sanitizados en el change record. No ejecutes SQL
+manual para convertir filas a `ACTIVE`: la activación será otro artefacto
+forward-only, con revisión, pruebas y aprobación separadas. La aprobación aquí
+descrita no abre ninguna ruta y no autoriza todavía al storefront. Un reintento
+después de una aprobación ya registrada falla cerrado para impedir una segunda
+decisión; antes de repetir, consulta el change record por el audit ID original.

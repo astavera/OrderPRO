@@ -1,18 +1,18 @@
 # Machine-to-machine authentication and webhook signing
 
-Status: Auth0 is selected for the STAGING M2M pilot. The tenant values are configured, the public JWKS was verified, and a fail-closed RFC 9068 verifier plus durable client registry are implemented. The client and grants remain `PENDING_VERIFICATION`, providers are not certified, and the API remains locked.
+Status: Auth0 is selected for the STAGING M2M pilot. The tenant values, public JWKS and real RFC 9068 token have been certified, and a fail-closed verifier plus durable client registry are implemented. An immutable approval registry and guarded command are prepared but have not been deployed or executed. The client, credential and grants remain `PENDING_VERIFICATION`, and the API remains locked.
 
 Human Supabase sessions and administrative cookies are never valid machine credentials. E-commerce and worker integrations use a separate identity, scope and secret lifecycle. Secrets stay server-side and must not use `NEXT_PUBLIC_` environment variables.
 
 ## Recommended API authentication
 
-The selected STAGING target is Auth0 OAuth 2.0 Client Credentials with short-lived RFC 9068 bearer access tokens. The fixed pilot contract uses RS256, a maximum configured token lifetime of 3600 seconds and explicit grants for `local-delivery:quote` and `local-delivery:holds`. Implementation is complete, but activation and end-to-end certification are not; the `/v1` API remains dependency-blocked for M2M use.
+The selected STAGING target is Auth0 OAuth 2.0 Client Credentials with short-lived RFC 9068 bearer access tokens. The fixed pilot contract uses RS256, a maximum configured token lifetime of 3600 seconds and explicit grants for `local-delivery:quote` and `local-delivery:holds`. End-to-end certification is complete; approval deployment, the human approval record and activation are not. The `/v1` API remains dependency-blocked for M2M use.
 
 ### Auth0 STAGING decision
 
 OrderPro does not accept the existing human Supabase Auth session as M2M identity. Supabase remains the human login provider and PostgreSQL platform. Auth0 is isolated to machine callers for the STAGING pilot; this does not migrate users or change human sessions.
 
-The operator provides only the canonical Auth0 Tenant Domain, the API Identifier/Audience and the public M2M Client ID. The STAGING pilot values have been received, but the durable machine client, credential and grants remain `PENDING_VERIFICATION`. The issuer and static JWKS URI are derived from the tenant domain. OrderPro never receives the Auth0 Client Secret, a Management API token or credentials used by the caller to acquire tokens. See [Auth0 M2M STAGING setup](auth0-m2m-staging-setup.md).
+The operator provides only the canonical Auth0 Tenant Domain, the API Identifier/Audience and the public M2M Client ID. The STAGING pilot values and sanitized certification evidence have been received, but the durable machine client, credential and grants remain `PENDING_VERIFICATION`. The issuer and static JWKS URI are derived from the tenant domain. OrderPro never receives the Auth0 Client Secret, a Management API token or credentials used by the caller to acquire tokens. See [Auth0 M2M STAGING setup](auth0-m2m-staging-setup.md).
 
 Do not connect the implemented JWT verifier to a public runtime until an audited decision record certifies all of the following together:
 
@@ -27,7 +27,7 @@ The resource server must use a statically trusted JWKS URI; it must never follow
 
 The STAGING verifier is implemented in `src/infrastructure/m2m/auth0-machine-authenticator.ts`. It requires a compact Bearer JWT with `typ=at+jwt`, `alg=RS256`, a bounded `kid`, the exact issuer and only the configured audience, `client_id`, `<client_id>@clients` subject, `jti`, `iat`, `exp`, and a space-delimited `scope`. It rejects token-supplied key URLs/material, lifetimes over 3600 seconds, malformed or duplicate scopes, and unknown or inactive clients. Sender-constrained (`cnf`) and Auth0 Organization (`org_id`/`org_name`) tokens are rejected until their proof/binding is deliberately implemented. Its authenticated principal contains OrderPro's internal client key and only the intersection of token scopes with active registry grants; raw Auth0 identifiers and tokens never cross the application boundary.
 
-The tenant discovery document and JWKS are public and were checked without credentials. The current JWKS exposes multiple RSA/RS256 signing keys, so resolution is by `kid` with bounded remote caching and rotation support. This confirms the public key source, not the API's private Dashboard settings; an end-to-end STAGING token test is still required before activation.
+The tenant discovery document and JWKS are public and were checked without credentials. The current JWKS exposes multiple RSA/RS256 signing keys, so resolution is by `kid` with bounded remote caching and rotation support. The end-to-end STAGING token test then confirmed the exact issuer, audience, profile, lifetime, Client ID and two scopes without retaining the token.
 
 The one-time command `npm run m2m:certify:staging` accepts an access token only through a hidden prompt and anonymous stdin pipe. It refuses command-line arguments, regular-file stdin, a dirty Git tree or an uncommitted verifier, and gives the child only an allowlisted environment. It reuses the production verifier/JWKS while a private certification-only registry wrapper proves that the real registry still denies the pending credential. A successful run records only `verifiedAt` and sanitized audit evidence tied to the source commit/tree; no status becomes active and no raw token, JTI, external Client ID or authorization header is retained. See the [Auth0 STAGING setup](auth0-m2m-staging-setup.md#certificación-real-sin-activar-el-api).
 
@@ -194,8 +194,9 @@ Do not disable authentication, reuse a human cookie or expose a secret to the br
 
 ## Decisions required before enablement
 
-- End-to-end Auth0 STAGING token evidence for the configured issuer, audience, RFC 9068 profile and scopes.
-- Audited activation of the pending client, credential and exact grants.
+- Deploy the reviewed approval-registry migration and record one active `OWNER` decision against the exact certified evidence. This records approval only and leaves all authorization pending.
+- Before executing that decision, choose the human-attribution control: a signed change record binding the privileged CLI operator to the Owner, or an application route backed by an authenticated Supabase Owner session. The CLI UUID alone is not human authentication or non-repudiation.
+- Build and review a separate forward-only activation artifact for the pending client, credential and exact grants.
 - Whether a signed-request HMAC fallback is necessary.
 - Client inventory, owners and exact scope grants.
 - Rate and payload-size limits.

@@ -142,6 +142,29 @@ Quote addresses and coordinates are customer data. Do not include them in ordina
 6. Confirm client, credential and grants remain `PENDING_VERIFICATION`, M2M mode remains `DISABLED`, the V4 gate remains false and all locked routes still return 503.
 7. Treat registry activation and runtime enablement as later, separate approvals. Certification alone authorizes nothing.
 
+### Audited M2M approval without activation
+
+After `CERTIFIED_PENDING_APPROVAL`, deploy the reviewed approval-registry
+migration and use `scripts/approve-auth0-m2m-staging.ps1` with only an active
+OWNER UUID, a 10–500 character non-secret reason, the certification audit event
+ID and its evidence digest. Run it only from its committed, clean Git tree. A
+successful result must be `APPROVED_PENDING_ACTIVATION` and must still report the
+client, credential and grants as `PENDING_VERIFICATION`, M2M mode as `DISABLED`
+and the Local Delivery V4 API gate as false.
+
+The CLI validates the referenced Owner in the database but does not authenticate
+that human. Treat `actorId` as a privileged-operator attribution, not independent
+non-repudiation. Do not run the approval until a change record approved by that
+Owner binds the operator to the decision, or an authenticated Supabase Owner
+session replaces the CLI assertion. Schema deployment alone remains safe and
+must leave the approval table empty.
+
+The approval command cannot receive a bearer token, Client Secret, Management
+API token, Authorization header, external Client ID or runtime flag. Retain the
+approval ID, audit ID, correlation ID, approval digest and source commit in the
+change record. Activation and runtime enablement remain later forward-only
+changes; never bypass the three database activation guards with manual SQL.
+
 ## Rollback
 
 Rollback creates a new publication from a historical snapshot. It never mutates or reactivates the old row in place.
@@ -229,7 +252,7 @@ Never retain access tokens, signing secrets, full authorization headers or unnec
 - Complete approved general fees for both stores.
 - Slot schedules, capacity rules and hold lifetime.
 - Geocoding/routing providers and map/topology tooling.
-- End-to-end Auth0 token certification, approval/activation of the pending durable client registry/grants and rate limits.
+- Deployment of the prepared M2M approval registry, one audited `OWNER` approval, a later separate activation artifact and rate limits. Token certification itself is complete.
 - Webhook subscriber, signing secrets, retry/dead-letter ownership.
 - Store-backed pickup schedule, cutoff, holiday calendar and safety stock.
 - Product/lots synchronization and inventory mutation certification.
