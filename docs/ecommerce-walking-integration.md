@@ -1,6 +1,6 @@
 # E-commerce integration for walking delivery
 
-Status: versioned integration contract. It is not evidence that the endpoints, credentials or production configuration are enabled.
+Status as of July 20, 2026: the STAGING Auth0 registry and verifier are active, so a storefront backend can test its server-to-server connection through `POST /api/v1/local-delivery/auth-check`. Quote, hold, confirm and release remain disabled and dependency-blocked; this document is not authorization for production traffic.
 
 The e-commerce consumes OrderPRO through versioned HTTP APIs and signed webhooks only. It must never read or write OrderPRO tables directly, and OrderPRO must never write the e-commerce database directly.
 
@@ -16,6 +16,7 @@ This integration does not authorize payment capture, production Square Orders or
 
 | Operation | Required scope | Phase | Status/dependencies |
 | --- | --- | --- | --- |
+| `POST /api/v1/local-delivery/auth-check` | `local-delivery:quote` + `local-delivery:holds` | STAGING handshake | Deployed; anonymous calls return `401`, and a valid token must return a sanitized `AUTHENTICATED` result with `localDeliveryApiStatus: DEPENDENCY_BLOCKED` |
 | `GET /v1/walking-zones` | `walking-zones:read` | 2 | Administrative read; human/admin M2M policy required |
 | `GET /v1/walking-zones/{id}` | `walking-zones:read` | 2 | Administrative read |
 | `POST /v1/walking-zones/drafts` | `walking-zones:write` | 1–2 | Draft only; requires configured locations |
@@ -272,7 +273,7 @@ These examples contain no customer data and are safe contract fixtures:
 
 ## Integration decisions still required
 
-- M2M issuer/token endpoint or approved signed-request alternative.
+- Storefront-backend Client Credentials acquisition, token caching/renewal and secret-manager integration. Auth0 issuer, audience, JWKS and OrderPRO verification are already configured in STAGING.
 - Webhook subscriber URL, signing secret, replay window and rotation schedule.
 - Rate limits, retry ceilings and dead-letter escalation.
 - Snapshot staleness tolerance during OrderPRO outage.

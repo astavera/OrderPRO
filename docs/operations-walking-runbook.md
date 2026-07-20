@@ -1,6 +1,6 @@
 # Walking delivery operations runbook
 
-Status: pre-production operating procedure. Steps marked dependency-blocked are not authorization to run them in production.
+Status as of July 20, 2026: pre-production operating procedure. STAGING M2M registry activation and Auth0 runtime enablement are complete, but Local Delivery V4 remains disabled and dependency-blocked. Steps marked dependency-blocked are not authorization to run them in production.
 
 This runbook governs administrative configuration, publication, rollback and integration recovery for walking delivery. It does not cover payment capture, Square writes, driver dispatch optimization or automatic refunds.
 
@@ -127,7 +127,7 @@ Quote addresses and coordinates are customer data. Do not include them in ordina
 
 - The implemented STAGING verifier accepts Auth0's pilot header `typ=at+jwt` only, uses RS256, and never follows `jku`, `jwk` or `x5u` from a token.
 - The trusted JWKS URL is derived exactly from the configured issuer. Keys are selected by `kid`; an unknown `kid` is `401 UNAUTHORIZED`, while network, timeout, HTTP, JSON or malformed-JWKS failures are temporary `503` authentication unavailability.
-- Remote JWKS requests time out after 5 seconds. A successful set is fresh for 10 minutes and new fetches cool down for 30 seconds. These are STAGING pilot values that require explicit operational acceptance before activation.
+- Remote JWKS requests time out after 5 seconds. A successful set is fresh for 10 minutes and new fetches cool down for 30 seconds. These values were accepted for the STAGING activation and must be reassessed before production.
 - The 10-minute freshness window supports normal key rotation but may continue trusting a removed key during that window. For suspected key compromise, lock the API immediately rather than relying only on JWKS removal.
 - A normal rotation must publish the new public key before Auth0 begins issuing its `kid`, retain overlap long enough for issued tokens, and verify both old/new paths in STAGING before retiring the old key.
 - Never store or attach raw access tokens to logs, alerts or the evidence package. Correlate using OrderPro client key, correlation ID and sanitized outcome only.
@@ -178,8 +178,28 @@ must leave the approval table empty.
 The approval command cannot receive a bearer token, Client Secret, Management
 API token, Authorization header, external Client ID or runtime flag. Retain the
 approval ID, audit ID, correlation ID, approval digest and source commit in the
-change record. Activation and runtime enablement remain later forward-only
+change record. At the approval step, activation and runtime enablement remain later forward-only
 changes; never bypass the three database activation guards with manual SQL.
+
+### Current STAGING M2M activation state
+
+The immutable activation was recorded on July 20, 2026 at 04:15:33 ET by
+sebastian. The client, credential and exact two grants are `ACTIVE`. The
+activation UI was closed and redeployed, the approval UI remains closed, and
+Auth0 runtime verification was enabled in a separate deployment. Local Delivery
+V4 remains disabled.
+
+Post-deployment checks established the following safe baseline:
+
+- `POST /api/v1/local-delivery/auth-check` without a token returns `401 UNAUTHORIZED`.
+- Local Delivery quote and holds return `503 M2M_AUTH_NOT_CONFIGURED` while the V4 gate is false.
+- `GET /api/health` returns `200` with `productionOperationsEnabled: false`.
+- `GET /api/health/ready` returns `200` with both Supabase database and auth dependencies ready.
+
+The anonymous `401` confirms fail-closed rejection, not successful machine
+authentication. Before any broader STAGING use, call `auth-check` with a valid
+ephemeral token and retain only the sanitized `AUTHENTICATED` result. Do not open
+the V4 gate as part of that verification.
 
 ## Rollback
 
@@ -268,7 +288,7 @@ Never retain access tokens, signing secrets, full authorization headers or unnec
 - Complete approved general fees for both stores.
 - Slot schedules, capacity rules and hold lifetime.
 - Geocoding/routing providers and map/topology tooling.
-- Deployment of the prepared M2M approval registry, one audited `OWNER` approval, a later separate activation artifact and rate limits. Token certification itself is complete.
+- M2M certification, Owner approval, registry activation and Auth0 runtime enablement are complete in STAGING; valid-token runtime evidence, rate limits and production authorization remain pending.
 - Webhook subscriber, signing secrets, retry/dead-letter ownership.
 - Store-backed pickup schedule, cutoff, holiday calendar and safety stock.
 - Product/lots synchronization and inventory mutation certification.

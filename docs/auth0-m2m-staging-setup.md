@@ -1,6 +1,6 @@
 # Auth0 M2M STAGING: datos de incorporación
 
-Estado: la configuración pública, el registro pendiente y la certificación real del token de STAGING ya están completos. La aprobación auditable está preparada en código, pero su migración no se ha desplegado ni la decisión se ha registrado. El cliente y los dos gates continúan cerrados.
+Estado al 20 de julio de 2026: la certificación, la aprobación y la activación auditable de STAGING están completas. La activación inmutable fue registrada a las 04:15:33 ET por sebastian; el cliente, la credencial y los dos grants están en `ACTIVE`. Las UIs de aprobación y activación están cerradas, el verificador Auth0 está desplegado con `ORDERPRO_M2M_AUTH_MODE="AUTH0"` y Local Delivery V4 permanece cerrado con su gate en `false`.
 
 ## Qué dato necesitamos realmente
 
@@ -52,7 +52,10 @@ El Client Secret pertenece exclusivamente al servidor consumidor —por ejemplo,
 
 ## Dónde quedará en OrderPro
 
-La configuración server-only está en `.env.local` con este formato. Los valores reales no se copian a esta guía:
+Durante el onboarding, la certificación y la aprobación, la configuración
+server-only se mantuvo cerrada con este formato. Los valores reales no se copian
+a esta guía; el despliegue actual cambió el modo a `AUTH0` únicamente después de
+cerrar las UIs y completar la activación:
 
 ```env
 ORDERPRO_M2M_AUTH_MODE="DISABLED"
@@ -64,7 +67,7 @@ ORDERPRO_M2M_ALLOWED_ALGORITHM="RS256"
 
 ## Estado del onboarding
 
-El dominio, audience y Client ID públicos del piloto ya fueron recibidos. El Client ID se registra mediante `npm run m2m:onboard:staging` como credencial externa de la identidad interna `storefront-staging`, nunca dentro de una allowlist de `.env` ni de una migración versionada. El cliente, la credencial y sus grants permanecen en `PENDING_VERIFICATION`; un bloqueo de base de datos impide convertirlos a `ACTIVE` incluso después de registrar una aprobación.
+El dominio, audience y Client ID públicos del piloto fueron recibidos. El Client ID se registró mediante `npm run m2m:onboard:staging` como credencial externa de la identidad interna `storefront-staging`, nunca dentro de una allowlist de `.env` ni de una migración versionada. Después de certificar el token y registrar por separado la aprobación y la activación auditadas, el cliente, la credencial y sus dos grants están en `ACTIVE`.
 
 El comando acepta únicamente `--issuer` y `--client-id`. No existe una opción para Client Secret:
 
@@ -72,15 +75,15 @@ El comando acepta únicamente `--issuer` y `--client-id`. No existe una opción 
 npm run m2m:onboard:staging -- --issuer="https://<tenant>.us.auth0.com/" --client-id="<client-id-publico>"
 ```
 
-Los grants previstos son exactamente `local-delivery:quote` y `local-delivery:holds`. El propietario queda pendiente en vez de inventar una persona, y el runtime continúa bloqueado aunque el registro se haya creado correctamente.
+Los grants activos son exactamente `local-delivery:quote` y `local-delivery:holds`. La activación quedó atribuida al Owner autenticado que tomó la decisión; no se inventó un propietario para la identidad técnica.
 
-El modo permanece `DISABLED` durante esta preparación. El Client ID no se guardó como secreto ni como allowlist de entorno: quedó asociado al registro durable `storefront-staging`; el propietario, el estado activo y la autorización continúan pendientes.
+El Client ID no se guardó como secreto ni como allowlist de entorno: quedó asociado al registro durable `storefront-staging`. El despliegue actual usa `ORDERPRO_M2M_AUTH_MODE="AUTH0"`; ambos gates de administración M2M están en `false` y `ORDERPRO_LOCAL_DELIVERY_V4_API_ENABLED` permanece en `false`.
 
 La validación de configuración está en `src/infrastructure/m2m/auth0-config.ts`. Rechaza de forma cerrada valores incompletos, dominios no canónicos, cualquier audience distinto de `https://api.orderpro.internal/local-delivery/staging`, endpoints JWKS distintos al issuer, algoritmos diferentes a RS256 y cualquier entorno que no sea STAGING.
 
-El autenticador RFC 9068 ya está implementado en `src/infrastructure/m2m/auth0-machine-authenticator.ts`. Verifica la firma contra el JWKS fijo del tenant, selecciona llaves por `kid`, exige issuer/audience/`client_id`/subject/expiración/scopes exactos y después consulta el registro durable. Una firma válida por sí sola no autoriza: cliente, credencial y grant también deben estar activos. En este momento continúan pendientes, el modo sigue `DISABLED` y el runtime permanece cerrado.
+El autenticador RFC 9068 está implementado en `src/infrastructure/m2m/auth0-machine-authenticator.ts` y desplegado en STAGING. Verifica la firma contra el JWKS fijo del tenant, selecciona llaves por `kid`, exige issuer/audience/`client_id`/subject/expiración/scopes exactos y después consulta el registro durable. Una firma válida por sí sola no autoriza: cliente, credencial y grant también deben estar activos. Una llamada a `auth-check` sin token ya confirmó el límite fail-closed con `401 UNAUTHORIZED`; todavía debe conservarse evidencia de una llamada posterior con un token efímero válido que devuelva `AUTHENTICATED`.
 
-La certificación de extremo a extremo ya produjo evidencia sanitizada `CERTIFIED_PENDING_APPROVAL`; no se necesita otro token para preparar la decisión humana. Antes de cualquier activación todavía falta revisar y desplegar el registro de aprobaciones, registrar la decisión de un `OWNER` y crear un artefacto posterior de activación. El token y el Client Secret no deben copiarse a documentación, commits, capturas ni mensajes.
+La certificación de extremo a extremo produjo evidencia sanitizada `CERTIFIED_PENDING_APPROVAL`, que posteriormente fue consumida por la aprobación y la activación inmutables. El token y el Client Secret no deben copiarse a documentación, commits, capturas ni mensajes.
 
 ## Certificación real sin activar el API
 
@@ -130,9 +133,9 @@ El certificador usa el mismo verificador productivo y el JWKS real. También dem
 
 Los errores son deliberadamente sanitizados. `UNSAFE_CERTIFICATION_ENVIRONMENT` indica configuración insegura, código sin commit o un árbol Git sucio. `TOKEN_VERIFICATION_FAILED` indica que firma, issuer, audience, perfil, duración, Client ID o scopes no coinciden. `PENDING_REGISTRATION_NOT_READY` indica que el registro ya cambió o no tiene exactamente el estado esperado. Ningún fallo guarda evidencia ni activa permisos.
 
-## Aprobación humana posterior, todavía sin activar
+## Aprobación humana previa a la activación
 
-`CERTIFIED_PENDING_APPROVAL` habilita una decisión humana auditable, no el
+En esta etapa histórica, `CERTIFIED_PENDING_APPROVAL` habilita una decisión humana auditable, no el
 tráfico. La aprobación se registra únicamente después de desplegar la migración
 que crea `record_staging_machine_authorization_approval`. Esa función mantiene el
 cliente, la credencial y los dos grants en `PENDING_VERIFICATION`; los tres
@@ -245,6 +248,12 @@ decisión; antes de repetir, consulta el change record por el audit ID original.
 
 ## Activación separada y prueba de conexión
 
+Esta etapa se completó el 20 de julio de 2026. La activación inmutable quedó
+registrada a las 04:15:33 ET por sebastian, y el cliente, la credencial y los dos
+grants quedaron en `ACTIVE`. Después se cerró la UI de activación y se desplegó
+Auth0 en el runtime en un cambio separado; la UI de aprobación también permanece
+cerrada y Local Delivery V4 continúa deshabilitado.
+
 La activación preparada consume la aprobación inmutable mediante una segunda
 ventana autenticada de Owner. La migración instala un RPC auditado, pero no
 activa filas por sí sola. Durante esa ventana deben permanecer:
@@ -281,3 +290,10 @@ Una respuesta `AUTHENTICATED` demuestra issuer, audience, firma, vigencia,
 cliente durable y ambos scopes. La misma respuesta declara
 `localDeliveryApiStatus: DEPENDENCY_BLOCKED`: no autoriza a presentar precios,
 slots ni crear reservas hasta certificar y publicar todas las dependencias V4.
+
+La verificación operativa posterior confirmó `401 UNAUTHORIZED` sin token,
+`503 M2M_AUTH_NOT_CONFIGURED` en quote y holds, `200` en `/api/health` con
+`productionOperationsEnabled: false`, y `200`/`ready: true` en
+`/api/health/ready` con PostgreSQL y autenticación disponibles. El `401` prueba
+el rechazo seguro de una solicitud anónima; no sustituye la prueba pendiente con
+un token efímero válido en `auth-check`.

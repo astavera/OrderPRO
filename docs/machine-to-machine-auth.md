@@ -1,20 +1,20 @@
 # Machine-to-machine authentication and webhook signing
 
-Status: Auth0 is selected for the STAGING M2M pilot. The tenant values, public JWKS and real RFC 9068 token have been certified, and a fail-closed verifier plus durable client registry are implemented. An immutable approval registry and guarded command are prepared but have not been deployed or executed. The client, credential and grants remain `PENDING_VERIFICATION`, and the API remains locked.
+Status as of July 20, 2026: the Auth0 STAGING M2M certification, immutable Owner approval and audited registry activation are complete. The client, credential and exact two grants are `ACTIVE`; both administrative M2M UI gates are closed and the deployed runtime uses `ORDERPRO_M2M_AUTH_MODE="AUTH0"`. Local Delivery V4 remains intentionally disabled and dependency-blocked.
 
 Human Supabase sessions and administrative cookies are never valid machine credentials. E-commerce and worker integrations use a separate identity, scope and secret lifecycle. Secrets stay server-side and must not use `NEXT_PUBLIC_` environment variables.
 
 ## Recommended API authentication
 
-The selected STAGING target is Auth0 OAuth 2.0 Client Credentials with short-lived RFC 9068 bearer access tokens. The fixed pilot contract uses RS256, a maximum configured token lifetime of 3600 seconds and explicit grants for `local-delivery:quote` and `local-delivery:holds`. End-to-end certification is complete; approval deployment, the human approval record and activation are not. The `/v1` API remains dependency-blocked for M2M use.
+The selected STAGING target is Auth0 OAuth 2.0 Client Credentials with short-lived RFC 9068 bearer access tokens. The fixed pilot contract uses RS256, a maximum configured token lifetime of 3600 seconds and explicit grants for `local-delivery:quote` and `local-delivery:holds`. Certification, human approval, registry activation and Auth0 runtime deployment are complete. The Local Delivery APIs remain dependency-blocked because their independent V4 gate and provider composition are not enabled.
 
 ### Auth0 STAGING decision
 
 OrderPro does not accept the existing human Supabase Auth session as M2M identity. Supabase remains the human login provider and PostgreSQL platform. Auth0 is isolated to machine callers for the STAGING pilot; this does not migrate users or change human sessions.
 
-The operator provides only the canonical Auth0 Tenant Domain, the API Identifier/Audience and the public M2M Client ID. The STAGING pilot values and sanitized certification evidence have been received, but the durable machine client, credential and grants remain `PENDING_VERIFICATION`. The issuer and static JWKS URI are derived from the tenant domain. OrderPro never receives the Auth0 Client Secret, a Management API token or credentials used by the caller to acquire tokens. See [Auth0 M2M STAGING setup](auth0-m2m-staging-setup.md).
+The operator provides only the canonical Auth0 Tenant Domain, the API Identifier/Audience and the public M2M Client ID. The STAGING pilot values and sanitized certification evidence were received, and the durable machine client, credential and exact grants are now `ACTIVE`. The issuer and static JWKS URI are derived from the tenant domain. OrderPro never receives the Auth0 Client Secret, a Management API token or credentials used by the caller to acquire tokens. See [Auth0 M2M STAGING setup](auth0-m2m-staging-setup.md).
 
-Do not connect the implemented JWT verifier to a public runtime until an audited decision record certifies all of the following together:
+Connecting the implemented JWT verifier to a runtime requires an audited decision record that certifies all of the following together:
 
 - issuer and exact HTTPS JWKS URI;
 - audience and one approved asymmetric signing algorithm;
@@ -33,7 +33,7 @@ The one-time command `npm run m2m:certify:staging` accepts an access token only 
 
 This STAGING workstation ceremony attests the committed sources and dependency lockfile, but it is not a signed hermetic build attestation for the Node executable or installed `node_modules` bytes. Production certification must run the same command from a reviewed, immutable CI artifact or container with dependency-integrity evidence.
 
-Local Delivery V4 uses an additional all-or-nothing runtime gate. `ORDERPRO_LOCAL_DELIVERY_V4_API_ENABLED` is server-only and defaults to disabled. Even a future valid machine credential cannot reach quote or hold behavior unless authentication, client registry, all real providers, persistent stores, the versioned allocation strategy and the requested environment are ready at the same time. Partial configuration remains HTTP 503 and must not invoke business providers.
+Local Delivery V4 uses an additional all-or-nothing runtime gate. `ORDERPRO_LOCAL_DELIVERY_V4_API_ENABLED` is server-only and remains disabled. Even the active STAGING machine credential cannot reach quote or hold behavior unless authentication, client registry, all real providers, persistent stores, the versioned allocation strategy and the requested environment are ready at the same time. Partial configuration remains HTTP 503 and must not invoke business providers.
 
 An access token should identify one client and carry only approved scopes. A verifier must check signature, issuer, audience, expiration and scope on every request. Expected security claims include a stable client subject, expiration, audience and granted scopes; their exact names depend on the selected issuer.
 
@@ -57,9 +57,9 @@ If OAuth cannot be provided, a signed-request HMAC alternative may be designed a
 
 Scopes are additive but not interchangeable. A client with `walking-zones:write` cannot publish. Human permissions such as `fulfillment.publish` do not create M2M scopes, and M2M scopes do not grant access to the administrative panel.
 
-`POST /v1/walking-delivery/quotes` requires both `walking-zones:read` and `availability:read`: the first authorizes immutable zone/policy evaluation and the second authorizes live slots. Possession of only one scope is insufficient. The endpoint remains dependency-blocked until the target M2M verifier and client grants exist.
+`POST /v1/walking-delivery/quotes` requires both `walking-zones:read` and `availability:read`: the first authorizes immutable zone/policy evaluation and the second authorizes live slots. Possession of only one scope is insufficient. The endpoint remains dependency-blocked until its complete runtime, policies and providers are certified; activation of the separate Local Delivery V4 grants does not open this older contract.
 
-Local Walking Delivery V4 uses a separate versioned contract: `POST /api/v1/local-delivery/quote` requires `local-delivery:quote`, while `/api/v1/local-delivery/holds` and its `confirm`/`release` transitions require `local-delivery:holds`. Quote and hold creation require `Idempotency-Key`; confirm/release are state transitions keyed by the hold plus the same `orderId` or release `reason`. Prisma quote/hold adapters exist but remain disconnected. All four routes continue returning `503 M2M_AUTH_NOT_CONFIGURED` until the pending client and grants are approved, real providers are certified, and the complete runtime composition is reviewed. See the [V4 OpenAPI contract](openapi/orderpro-local-delivery-v1.yaml).
+Local Walking Delivery V4 uses a separate versioned contract: `POST /api/v1/local-delivery/quote` requires `local-delivery:quote`, while `/api/v1/local-delivery/holds` and its `confirm`/`release` transitions require `local-delivery:holds`. Quote and hold creation require `Idempotency-Key`; confirm/release are state transitions keyed by the hold plus the same `orderId` or release `reason`. Prisma quote/hold adapters exist but remain disconnected. The client and grants are active, but all four routes continue returning `503 M2M_AUTH_NOT_CONFIGURED` while the V4 gate is false and real providers plus the complete runtime composition remain uncertified. See the [V4 OpenAPI contract](openapi/orderpro-local-delivery-v1.yaml).
 
 ## API request headers
 
@@ -192,13 +192,19 @@ If a machine credential or signing key is suspected compromised:
 
 Do not disable authentication, reuse a human cookie or expose a secret to the browser as a recovery shortcut.
 
-## Decisions required before enablement
+## Completed STAGING M2M controls
 
-- Deploy the reviewed approval-registry migration and record one active `OWNER` decision against the exact certified evidence. This records approval only and leaves all authorization pending.
-- Before executing that decision, choose the human-attribution control: a signed change record binding the privileged CLI operator to the Owner, or an application route backed by an authenticated Supabase Owner session. The CLI UUID alone is not human authentication or non-repudiation.
-- Build and review a separate forward-only activation artifact for the pending client, credential and exact grants.
+- The approval-registry and activation migrations are deployed.
+- An authenticated Owner recorded the immutable approval and separate activation against the certified evidence.
+- The client, credential and exact two grants are active; the approval and activation UIs were closed afterward.
+- Auth0 runtime verification was enabled in a separate deployment. An anonymous `auth-check` request is rejected with `401 UNAUTHORIZED`.
+- Health and readiness checks pass, while quote and holds remain safely locked with HTTP 503.
+
+## Decisions required before Local Delivery enablement
+
+- Complete a post-activation `auth-check` using a valid ephemeral token and retain only the sanitized `AUTHENTICATED` outcome.
 - Whether a signed-request HMAC fallback is necessary.
-- Client inventory, owners and exact scope grants.
+- Broader client inventory, operational owners and scope grants beyond this completed pilot identity.
 - Rate and payload-size limits.
 - Webhook subscriber URLs and network restrictions.
 - Replay window and tolerated clock skew.

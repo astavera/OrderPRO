@@ -33,14 +33,14 @@ The browser is only a presentation surface. Machine credentials, access tokens, 
 - Hold application logic uses the quoted TTL, capacity requirement, slot, inventory evidence, and an explicit versioned `orderLocationId` decision.
 - Hold persistence has a Prisma adapter for atomic capacity and inventory reservation, idempotent replay, confirm, release, expiry, ordered locks, and exactly-once restoration.
 - The conservative allocation strategy `exact_physical_tuple_unique_sufficient_balance/v1` exists and is tested.
-- Auth0 token verification, scope checks, durable machine-client registry, correlation handling, and sanitized HTTP errors exist.
+- Auth0 token verification, scope checks, durable machine-client registry, correlation handling, and sanitized HTTP errors are deployed in STAGING. The registry is `ACTIVE`, both administrative M2M gates are closed, and the runtime uses `ORDERPRO_M2M_AUTH_MODE=AUTH0`.
 - The persisted capacity hold and inventory reservation lifecycle supports `HELD`, `CONFIRMED`, `RELEASED`, and `EXPIRED`.
 - A fail-closed `POST /api/v1/local-delivery/auth-check` endpoint can verify the activated Auth0 client and both scopes without enabling quote or hold traffic.
 
 ### Not implemented or not connected
 
 - The runtime intentionally has no READY branch. All four V4 routes currently return `503 M2M_AUTH_NOT_CONFIGURED`.
-- The machine client, credential, and grants are approved but remain pending until the prepared forward-only activation is executed by an authenticated Owner.
+- The machine client, credential, and exact grants are active after separate audited Owner approval and activation. A post-activation call to `auth-check` without a token correctly returns `401 UNAUTHORIZED`; sanitized evidence from a valid ephemeral token remains the final storefront-handshake check.
 - Real geocoder, Manhattan-jurisdiction, walking-router, polygon, inventory-assessment, slot-availability, and order-location providers are not wired.
 - The V4 fee policy and zone set remain DRAFT/STAGING; official geometry, schedules, capacity, TTL, and buffers are not published.
 - Prisma policy, quote, and hold adapters are not composed into the HTTP runtime.
