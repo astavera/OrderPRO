@@ -12,6 +12,12 @@ describe("RBAC permissions", () => {
     expect(hasPermission(["AUDITOR"], "m2m.approve")).toBe(false);
   });
 
+  it("reserves STAGING machine activation for Owners", () => {
+    expect(hasPermission(["OWNER"], "m2m.activate")).toBe(true);
+    expect(hasPermission(["OPERATIONS_ADMIN"], "m2m.activate")).toBe(false);
+    expect(hasPermission(["AUDITOR"], "m2m.activate")).toBe(false);
+  });
+
   it("allows owners to manage the complete fulfillment lifecycle", () => {
     const permissions: Permission[] = [
       "fulfillment.view",

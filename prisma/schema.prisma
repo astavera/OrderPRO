@@ -394,6 +394,7 @@ model User {
   walkingZoneSetVersionsPublished     WalkingZoneSetVersion[]           @relation("WalkingZoneSetVersionPublishedBy")
   machineClientsOwned                 MachineClient[]                   @relation("MachineClientOwner")
   machineAuthorizationApprovals       MachineAuthorizationApproval[]    @relation("MachineAuthorizationApprovalApprovedBy")
+  machineAuthorizationActivations     MachineAuthorizationActivation[]  @relation("MachineAuthorizationActivationActivatedBy")
 }
 
 model UserRole {
@@ -416,22 +417,23 @@ model UserLocationGrant {
 }
 
 model MachineClient {
-  id          String                         @id @default(uuid()) @db.Uuid
-  key         String                         @unique(map: "MachineClient_key_key") @db.VarChar(120)
-  displayName String                         @db.VarChar(160)
+  id          String                           @id @default(uuid()) @db.Uuid
+  key         String                           @unique(map: "MachineClient_key_key") @db.VarChar(120)
+  displayName String                           @db.VarChar(160)
   environment MachineEnvironment
-  status      MachineAuthorizationStatus     @default(PENDING_VERIFICATION)
-  ownerUserId String?                        @db.Uuid
-  version     Int                            @default(1)
-  activatedAt DateTime?                      @db.Timestamptz(6)
-  suspendedAt DateTime?                      @db.Timestamptz(6)
-  revokedAt   DateTime?                      @db.Timestamptz(6)
-  createdAt   DateTime                       @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime                       @updatedAt @db.Timestamptz(6)
-  owner       User?                          @relation("MachineClientOwner", fields: [ownerUserId], references: [id], onDelete: Restrict, map: "MachineClient_owner_fkey")
+  status      MachineAuthorizationStatus       @default(PENDING_VERIFICATION)
+  ownerUserId String?                          @db.Uuid
+  version     Int                              @default(1)
+  activatedAt DateTime?                        @db.Timestamptz(6)
+  suspendedAt DateTime?                        @db.Timestamptz(6)
+  revokedAt   DateTime?                        @db.Timestamptz(6)
+  createdAt   DateTime                         @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime                         @updatedAt @db.Timestamptz(6)
+  owner       User?                            @relation("MachineClientOwner", fields: [ownerUserId], references: [id], onDelete: Restrict, map: "MachineClient_owner_fkey")
   credentials MachineCredential[]
   grants      MachineClientGrant[]
   approvals   MachineAuthorizationApproval[]
+  activations MachineAuthorizationActivation[]
 
   @@unique([id, environment], map: "MachineClient_id_environment_key")
   @@index([environment, status], map: "MachineClient_environment_status_idx")
@@ -439,23 +441,24 @@ model MachineClient {
 }
 
 model MachineCredential {
-  id               String                         @id @default(uuid()) @db.Uuid
-  machineClientId  String                         @db.Uuid
+  id               String                           @id @default(uuid()) @db.Uuid
+  machineClientId  String                           @db.Uuid
   environment      MachineEnvironment
   provider         MachineCredentialProvider
-  issuer           String                         @db.VarChar(255)
-  externalClientId String                         @db.VarChar(120)
-  status           MachineAuthorizationStatus     @default(PENDING_VERIFICATION)
-  version          Int                            @default(1)
-  verifiedAt       DateTime?                      @db.Timestamptz(6)
-  activatedAt      DateTime?                      @db.Timestamptz(6)
-  suspendedAt      DateTime?                      @db.Timestamptz(6)
-  revokedAt        DateTime?                      @db.Timestamptz(6)
-  lastUsedAt       DateTime?                      @db.Timestamptz(6)
-  createdAt        DateTime                       @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime                       @updatedAt @db.Timestamptz(6)
-  client           MachineClient                  @relation(fields: [machineClientId, environment], references: [id, environment], onDelete: Restrict, map: "MachineCredential_client_environment_fkey")
+  issuer           String                           @db.VarChar(255)
+  externalClientId String                           @db.VarChar(120)
+  status           MachineAuthorizationStatus       @default(PENDING_VERIFICATION)
+  version          Int                              @default(1)
+  verifiedAt       DateTime?                        @db.Timestamptz(6)
+  activatedAt      DateTime?                        @db.Timestamptz(6)
+  suspendedAt      DateTime?                        @db.Timestamptz(6)
+  revokedAt        DateTime?                        @db.Timestamptz(6)
+  lastUsedAt       DateTime?                        @db.Timestamptz(6)
+  createdAt        DateTime                         @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime                         @updatedAt @db.Timestamptz(6)
+  client           MachineClient                    @relation(fields: [machineClientId, environment], references: [id, environment], onDelete: Restrict, map: "MachineCredential_client_environment_fkey")
   approvals        MachineAuthorizationApproval[]
+  activations      MachineAuthorizationActivation[]
 
   @@unique([provider, issuer, externalClientId], map: "MachineCredential_provider_issuer_external_key")
   @@index([machineClientId, environment, status], map: "MachineCredential_client_environment_status_idx")
@@ -479,33 +482,65 @@ model MachineClientGrant {
 }
 
 model MachineAuthorizationApproval {
-  id                                String             @id @db.Uuid
-  machineClientId                   String             @db.Uuid
+  id                                String                          @id @db.Uuid
+  machineClientId                   String                          @db.Uuid
   environment                       MachineEnvironment
-  credentialId                      String             @db.Uuid
-  approvedByUserId                  String             @db.Uuid
-  certificationAuditEventId         String             @unique(map: "MachineAuthorizationApproval_certification_audit_key") @db.Uuid
-  approvalAuditEventId              String             @unique(map: "MachineAuthorizationApproval_approval_audit_key") @db.Uuid
-  certificationCorrelationId        String             @db.Uuid
-  approvalCorrelationId             String             @unique(map: "MachineAuthorizationApproval_approval_correlation_key") @db.Uuid
-  certificationEvidenceDigestSha256 String             @db.Char(64)
+  credentialId                      String                          @db.Uuid
+  approvedByUserId                  String                          @db.Uuid
+  certificationAuditEventId         String                          @unique(map: "MachineAuthorizationApproval_certification_audit_key") @db.Uuid
+  approvalAuditEventId              String                          @unique(map: "MachineAuthorizationApproval_approval_audit_key") @db.Uuid
+  certificationCorrelationId        String                          @db.Uuid
+  approvalCorrelationId             String                          @unique(map: "MachineAuthorizationApproval_approval_correlation_key") @db.Uuid
+  certificationEvidenceDigestSha256 String                          @db.Char(64)
   clientVersion                     Int
   credentialVersion                 Int
   grantVersions                     Json
-  reason                            String             @db.VarChar(500)
-  decision                          String             @db.VarChar(40)
-  approvalSourceCommitSha           String             @db.VarChar(64)
-  approvalSourceTreeSha             String             @db.VarChar(64)
-  approvalDigestSha256              String             @unique(map: "MachineAuthorizationApproval_digest_key") @db.Char(64)
-  approvedAt                        DateTime           @default(now()) @db.Timestamptz(6)
-  client                            MachineClient      @relation(fields: [machineClientId, environment], references: [id, environment], onDelete: Restrict, map: "MachineAuthorizationApproval_client_environment_fkey")
-  credential                        MachineCredential  @relation(fields: [credentialId], references: [id], onDelete: Restrict, map: "MachineAuthorizationApproval_credential_fkey")
-  approvedBy                        User               @relation("MachineAuthorizationApprovalApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict, map: "MachineAuthorizationApproval_approved_by_fkey")
-  certificationAudit                AuditEvent         @relation("MachineAuthorizationApprovalCertificationAudit", fields: [certificationAuditEventId], references: [id], onDelete: Restrict, map: "MachineAuthorizationApproval_certification_audit_fkey")
-  approvalAudit                     AuditEvent         @relation("MachineAuthorizationApprovalApprovalAudit", fields: [approvalAuditEventId], references: [id], onDelete: Restrict, map: "MachineAuthorizationApproval_approval_audit_fkey")
+  reason                            String                          @db.VarChar(500)
+  decision                          String                          @db.VarChar(40)
+  approvalSourceCommitSha           String                          @db.VarChar(64)
+  approvalSourceTreeSha             String                          @db.VarChar(64)
+  approvalDigestSha256              String                          @unique(map: "MachineAuthorizationApproval_digest_key") @db.Char(64)
+  approvedAt                        DateTime                        @default(now()) @db.Timestamptz(6)
+  client                            MachineClient                   @relation(fields: [machineClientId, environment], references: [id, environment], onDelete: Restrict, map: "MachineAuthorizationApproval_client_environment_fkey")
+  credential                        MachineCredential               @relation(fields: [credentialId], references: [id], onDelete: Restrict, map: "MachineAuthorizationApproval_credential_fkey")
+  approvedBy                        User                            @relation("MachineAuthorizationApprovalApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict, map: "MachineAuthorizationApproval_approved_by_fkey")
+  certificationAudit                AuditEvent                      @relation("MachineAuthorizationApprovalCertificationAudit", fields: [certificationAuditEventId], references: [id], onDelete: Restrict, map: "MachineAuthorizationApproval_certification_audit_fkey")
+  approvalAudit                     AuditEvent                      @relation("MachineAuthorizationApprovalApprovalAudit", fields: [approvalAuditEventId], references: [id], onDelete: Restrict, map: "MachineAuthorizationApproval_approval_audit_fkey")
+  activation                        MachineAuthorizationActivation?
 
   @@index([machineClientId, environment, approvedAt], map: "MachineAuthorizationApproval_client_environment_approved_idx")
   @@index([approvedByUserId, approvedAt], map: "MachineAuthorizationApproval_approved_by_idx")
+}
+
+model MachineAuthorizationActivation {
+  id                        String                       @id @db.Uuid
+  approvalId                String                       @unique(map: "MachineAuthorizationActivation_approval_key") @db.Uuid
+  machineClientId           String                       @db.Uuid
+  environment               MachineEnvironment
+  credentialId              String                       @db.Uuid
+  activatedByUserId         String                       @db.Uuid
+  activationAuditEventId    String                       @unique(map: "MachineAuthorizationActivation_audit_key") @db.Uuid
+  activationCorrelationId   String                       @unique(map: "MachineAuthorizationActivation_correlation_key") @db.Uuid
+  approvalDigestSha256      String                       @db.Char(64)
+  clientVersionBefore       Int
+  credentialVersionBefore   Int
+  grantVersionsBefore       Json
+  clientVersionAfter        Int
+  credentialVersionAfter    Int
+  grantVersionsAfter        Json
+  reason                    String                       @db.VarChar(500)
+  activationSourceCommitSha String                       @db.VarChar(64)
+  activationSourceTreeSha   String                       @db.VarChar(64)
+  activationDigestSha256    String                       @unique(map: "MachineAuthorizationActivation_digest_key") @db.Char(64)
+  activatedAt               DateTime                     @db.Timestamptz(6)
+  approval                  MachineAuthorizationApproval @relation(fields: [approvalId], references: [id], onDelete: Restrict, map: "MachineAuthorizationActivation_approval_fkey")
+  client                    MachineClient                @relation(fields: [machineClientId, environment], references: [id, environment], onDelete: Restrict, map: "MachineAuthorizationActivation_client_environment_fkey")
+  credential                MachineCredential            @relation(fields: [credentialId], references: [id], onDelete: Restrict, map: "MachineAuthorizationActivation_credential_fkey")
+  activatedBy               User                         @relation("MachineAuthorizationActivationActivatedBy", fields: [activatedByUserId], references: [id], onDelete: Restrict, map: "MachineAuthorizationActivation_activated_by_fkey")
+  activationAudit           AuditEvent                   @relation("MachineAuthorizationActivationAudit", fields: [activationAuditEventId], references: [id], onDelete: Restrict, map: "MachineAuthorizationActivation_audit_fkey")
+
+  @@index([machineClientId, environment, activatedAt], map: "MachineAuthorizationActivation_client_environment_activated_idx")
+  @@index([activatedByUserId, activatedAt], map: "MachineAuthorizationActivation_activated_by_idx")
 }
 
 model IdempotencyRecord {
@@ -568,8 +603,8 @@ model FeatureFlag {
 }
 
 model AuditEvent {
-  id                                 String                         @id @default(uuid()) @db.Uuid
-  actorId                            String?                        @db.Uuid
+  id                                 String                           @id @default(uuid()) @db.Uuid
+  actorId                            String?                          @db.Uuid
   action                             String
   entityType                         String
   entityId                           String?
@@ -578,10 +613,11 @@ model AuditEvent {
   reason                             String?
   before                             Json?
   after                              Json?
-  occurredAt                         DateTime                       @default(now()) @db.Timestamp(6)
-  actor                              User?                          @relation(fields: [actorId], references: [id], onDelete: SetNull)
-  machineAuthorizationCertifications MachineAuthorizationApproval[] @relation("MachineAuthorizationApprovalCertificationAudit")
-  machineAuthorizationApprovals      MachineAuthorizationApproval[] @relation("MachineAuthorizationApprovalApprovalAudit")
+  occurredAt                         DateTime                         @default(now()) @db.Timestamp(6)
+  actor                              User?                            @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  machineAuthorizationCertifications MachineAuthorizationApproval[]   @relation("MachineAuthorizationApprovalCertificationAudit")
+  machineAuthorizationApprovals      MachineAuthorizationApproval[]   @relation("MachineAuthorizationApprovalApprovalAudit")
+  machineAuthorizationActivations    MachineAuthorizationActivation[] @relation("MachineAuthorizationActivationAudit")
 
   @@index([entityType, entityId, occurredAt])
   @@index([actorId, occurredAt])

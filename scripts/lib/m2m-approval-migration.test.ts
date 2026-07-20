@@ -30,6 +30,10 @@ const ids = {
   occupiedCorrelation: "9a000000-0000-4000-8000-00000000000f",
   directAudit: "9b000000-0000-4000-8000-000000000001",
   directCorrelation: "9b000000-0000-4000-8000-000000000002",
+  activationAudit: "9c000000-0000-4000-8000-000000000001",
+  activationCorrelation: "9c000000-0000-4000-8000-000000000002",
+  secondActivationAudit: "9c000000-0000-4000-8000-000000000003",
+  secondActivationCorrelation: "9c000000-0000-4000-8000-000000000004",
 } as const;
 
 const issuer = "https://dev-rfzzpvgkfg1mwf3m.us.auth0.com/";
@@ -41,6 +45,8 @@ const verifierDigest = "e".repeat(64);
 const approvalCommit = "f".repeat(40);
 const approvalTree = "a".repeat(40);
 const reason = "Owner reviewed the certified STAGING identity and exact grants.";
+const activationReason =
+  "Owner activates only the approved STAGING machine registry.";
 const scopes = ["local-delivery:holds", "local-delivery:quote"] as const;
 
 const config: Auth0M2mConfiguration = {
@@ -135,6 +141,34 @@ function approvalCall(overrides: {
       '${overrides.certificationCorrelationId ?? ids.certificationCorrelation}'::UUID,
       '${overrides.approvalAuditId ?? ids.approvalAudit}'::UUID,
       '${overrides.approvalCorrelationId ?? ids.approvalCorrelation}'::UUID
+    )
+  `;
+}
+
+function activationCall(overrides: {
+  actorId?: string;
+  approvalId?: string;
+  approvalDigestSha256?: string;
+  activationAuditId?: string;
+  activationCorrelationId?: string;
+} = {}) {
+  const approvalDigest = overrides.approvalDigestSha256
+    ? `'${overrides.approvalDigestSha256}'::TEXT`
+    : `(SELECT "approvalDigestSha256"::TEXT
+        FROM "MachineAuthorizationApproval"
+        WHERE "id" = '${overrides.approvalId ?? ids.approvalAudit}')`;
+  return `
+    SELECT *
+    FROM record_staging_machine_authorization_activation(
+      'storefront-staging'::TEXT,
+      '${overrides.actorId ?? ids.owner}'::UUID,
+      '${activationReason}'::TEXT,
+      '${overrides.approvalId ?? ids.approvalAudit}'::UUID,
+      ${approvalDigest},
+      '${"1".repeat(40)}'::TEXT,
+      '${"2".repeat(40)}'::TEXT,
+      '${overrides.activationAuditId ?? ids.activationAudit}'::UUID,
+      '${overrides.activationCorrelationId ?? ids.activationCorrelation}'::UUID
     )
   `;
 }
@@ -247,7 +281,7 @@ describe.sequential("M2M STAGING approval migration", () => {
             AND schema_row.nspname = 'public'
             AND trigger_row.tgenabled = 'O'
             AND trigger_row.tgtype = 23
-            AND function_row.proname = 'reject_machine_authorization_activation'
+            AND function_row.proname = 'guard_staging_machine_authorization_activation'
             AND (
               (trigger_row.tgname = 'machine_client_no_activation'
                 AND table_row.relname = 'MachineClient')
@@ -492,5 +526,165 @@ describe.sequential("M2M STAGING approval migration", () => {
         ) AS "approvalAuditCount"
     `);
     expect(counts.rows[0]).toEqual({ approvalCount: 1, approvalAuditCount: 1 });
+  });
+
+  it("rejects activation by a non-Owner or against a mismatched approval digest", async () => {
+    await expectTransactionReject(activationCall({ actorId: ids.nonOwner }));
+    await expectTransactionReject(
+      activationCall({ approvalDigestSha256: "3".repeat(64) }),
+    );
+
+    const state = await db.query<{
+      activationCount: number;
+      activationAuditCount: number;
+      clientStatus: string;
+    }>(`
+      SELECT
+        (SELECT COUNT(*)::INTEGER FROM "MachineAuthorizationActivation") AS "activationCount",
+        (
+          SELECT COUNT(*)::INTEGER FROM "AuditEvent"
+          WHERE "action" = 'm2m.client.authorization_activated'
+        ) AS "activationAuditCount",
+        (SELECT "status"::TEXT FROM "MachineClient" WHERE "id" = '${ids.client}')
+          AS "clientStatus"
+    `);
+    expect(state.rows[0]).toEqual({
+      activationCount: 0,
+      activationAuditCount: 0,
+      clientStatus: "PENDING_VERIFICATION",
+    });
+  });
+
+  it("activates exactly one client, credential and two grants atomically", async () => {
+    const result = await executeApproval<{
+      activationId: string;
+      approvalId: string;
+      clientKey: string;
+      environment: string;
+      result: string;
+      authorizationStatus: string;
+      activationAuditEventId: string;
+      activationCorrelationId: string;
+      activationDigestSha256: string;
+      activatedAt: Date;
+    }>(activationCall());
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      activationId: ids.activationAudit,
+      approvalId: ids.approvalAudit,
+      clientKey: "storefront-staging",
+      environment: "STAGING",
+      result: "ACTIVATED",
+      authorizationStatus: "ACTIVE",
+      activationAuditEventId: ids.activationAudit,
+      activationCorrelationId: ids.activationCorrelation,
+    });
+    expect(result.rows[0]?.activationDigestSha256).toMatch(/^[a-f0-9]{64}$/);
+
+    const persisted = await db.query<{
+      activationCount: number;
+      activationAuditCount: number;
+      clientStatus: string;
+      clientVersion: number;
+      clientOwnerUserId: string | null;
+      credentialStatus: string;
+      credentialVersion: number;
+      activeGrantCount: number;
+      clientActivatedAt: string;
+      credentialActivatedAt: string;
+      earliestGrantActivatedAt: string;
+      latestGrantActivatedAt: string;
+      auditOccurredAt: string;
+      serializedAudit: string;
+    }>(`
+      SELECT
+        (SELECT COUNT(*)::INTEGER FROM "MachineAuthorizationActivation") AS "activationCount",
+        (
+          SELECT COUNT(*)::INTEGER FROM "AuditEvent"
+          WHERE "action" = 'm2m.client.authorization_activated'
+        ) AS "activationAuditCount",
+        client."status"::TEXT AS "clientStatus",
+        client."version" AS "clientVersion",
+        client."ownerUserId" AS "clientOwnerUserId",
+        credential."status"::TEXT AS "credentialStatus",
+        credential."version" AS "credentialVersion",
+        COUNT(*) FILTER (WHERE grant_row."status" = 'ACTIVE')::INTEGER AS "activeGrantCount",
+        client."activatedAt"::TEXT AS "clientActivatedAt",
+        credential."activatedAt"::TEXT AS "credentialActivatedAt",
+        MIN(grant_row."activatedAt")::TEXT AS "earliestGrantActivatedAt",
+        MAX(grant_row."activatedAt")::TEXT AS "latestGrantActivatedAt",
+        MAX(audit."occurredAt")::TEXT AS "auditOccurredAt",
+        MAX(CONCAT(audit."before"::TEXT, audit."after"::TEXT)) AS "serializedAudit"
+      FROM "MachineClient" client
+      JOIN "MachineCredential" credential ON credential."machineClientId" = client."id"
+      JOIN "MachineClientGrant" grant_row ON grant_row."machineClientId" = client."id"
+      JOIN "AuditEvent" audit ON audit."id" = '${ids.activationAudit}'
+      WHERE client."id" = '${ids.client}'
+      GROUP BY client."status", client."version", client."ownerUserId",
+               client."activatedAt", credential."status", credential."version",
+               credential."activatedAt"
+    `);
+    const row = persisted.rows[0]!;
+    expect(row).toMatchObject({
+      activationCount: 1,
+      activationAuditCount: 1,
+      clientStatus: "ACTIVE",
+      clientVersion: 2,
+      clientOwnerUserId: null,
+      credentialStatus: "ACTIVE",
+      credentialVersion: 3,
+      activeGrantCount: 2,
+    });
+    expect(row.clientActivatedAt).toBe(row.credentialActivatedAt);
+    expect(row.clientActivatedAt).toBe(row.earliestGrantActivatedAt);
+    expect(row.clientActivatedAt).toBe(row.latestGrantActivatedAt);
+    expect(new Date(row.clientActivatedAt).getTime()).toBe(
+      new Date(`${row.auditOccurredAt}Z`).getTime(),
+    );
+    expect(row.serializedAudit).not.toContain(pendingSnapshot.externalClientId);
+    expect(row.serializedAudit.toLowerCase()).not.toContain("secret");
+    expect(row.serializedAudit.toLowerCase()).not.toContain("authorizationheader");
+    expect(row.serializedAudit.toLowerCase()).not.toContain("bearer ");
+    expect(row.serializedAudit.toLowerCase()).not.toContain("access_token");
+  });
+
+  it("replays identically, rejects a second activation and retains append-only evidence", async () => {
+    const replay = await executeApproval<{
+      activationId: string;
+      activationCorrelationId: string;
+      activationDigestSha256: string;
+      activatedAt: Date;
+    }>(activationCall());
+    expect(replay.rows[0]).toMatchObject({
+      activationId: ids.activationAudit,
+      activationCorrelationId: ids.activationCorrelation,
+    });
+
+    await expectTransactionReject(
+      activationCall({
+        activationAuditId: ids.secondActivationAudit,
+        activationCorrelationId: ids.secondActivationCorrelation,
+      }),
+    );
+    await expect(db.exec(`
+      UPDATE "MachineAuthorizationActivation"
+      SET "reason" = 'Rewriting immutable activation is forbidden.'
+      WHERE "id" = '${ids.activationAudit}'
+    `)).rejects.toThrow("MachineAuthorizationActivation is append-only");
+
+    await db.exec(`
+      UPDATE "MachineCredential"
+      SET "lastUsedAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = '${ids.credential}' AND "status" = 'ACTIVE'
+    `);
+    const counts = await db.query<{ activationCount: number; auditCount: number }>(`
+      SELECT
+        (SELECT COUNT(*)::INTEGER FROM "MachineAuthorizationActivation") AS "activationCount",
+        (
+          SELECT COUNT(*)::INTEGER FROM "AuditEvent"
+          WHERE "action" = 'm2m.client.authorization_activated'
+        ) AS "auditCount"
+    `);
+    expect(counts.rows[0]).toEqual({ activationCount: 1, auditCount: 1 });
   });
 });

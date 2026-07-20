@@ -242,3 +242,42 @@ forward-only, con revisión, pruebas y aprobación separadas. La aprobación aqu
 descrita no abre ninguna ruta y no autoriza todavía al storefront. Un reintento
 después de una aprobación ya registrada falla cerrado para impedir una segunda
 decisión; antes de repetir, consulta el change record por el audit ID original.
+
+## Activación separada y prueba de conexión
+
+La activación preparada consume la aprobación inmutable mediante una segunda
+ventana autenticada de Owner. La migración instala un RPC auditado, pero no
+activa filas por sí sola. Durante esa ventana deben permanecer:
+
+```env
+ORDERPRO_M2M_AUTH_MODE="DISABLED"
+ORDERPRO_LOCAL_DELIVERY_V4_API_ENABLED="false"
+ORDERPRO_M2M_STAGING_APPROVAL_UI_ENABLED="false"
+ORDERPRO_M2M_STAGING_ACTIVATION_UI_ENABLED="true"
+```
+
+La confirmación exacta es:
+
+```text
+ACTIVATE STOREFRONT-STAGING M2M ONLY
+```
+
+Una activación correcta cambia atómicamente a `ACTIVE` el cliente, su única
+credencial certificada y los dos grants aprobados. También crea un
+`AuditEvent` y un registro append-only `MachineAuthorizationActivation`. No
+habilita Auth0 en el runtime ni abre quote/holds.
+
+Después se cierra inmediatamente la ventana de activación y, en un despliegue
+separado, se configura `ORDERPRO_M2M_AUTH_MODE="AUTH0"`. El backend del
+storefront puede probar su token con:
+
+```text
+POST /api/v1/local-delivery/auth-check
+Authorization: Bearer <token efímero>
+X-Correlation-ID: <id seguro>
+```
+
+Una respuesta `AUTHENTICATED` demuestra issuer, audience, firma, vigencia,
+cliente durable y ambos scopes. La misma respuesta declara
+`localDeliveryApiStatus: DEPENDENCY_BLOCKED`: no autoriza a presentar precios,
+slots ni crear reservas hasta certificar y publicar todas las dependencias V4.

@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getStagingMachineAuthorizationApprovalPageData } from "@/application/m2m/staging-authorization-approval";
+import { getStagingMachineAuthorizationActivationPageData } from "@/application/m2m/staging-authorization-activation";
+import { StagingM2mActivationForm } from "./activation-form";
 import { StagingM2mApprovalForm } from "./approval-form";
 
 export const dynamic = "force-dynamic";
@@ -24,19 +26,36 @@ function shortHash(value: string) {
 }
 
 export default async function StagingM2mApprovalPage() {
-  const data = await getStagingMachineAuthorizationApprovalPageData();
-  const completed = data.approval?.decision === "APPROVED_PENDING_ACTIVATION";
-  const gateRows = [
-    ["Approval UI gate", data.gates.approvalUiEnabled],
-    ["Production build", data.gates.productionBuild],
-    ["STAGING runtime", data.gates.stagingRuntime],
-    ["M2M authentication disabled", data.gates.m2mAuthDisabled],
-    ["Local Delivery V4 API disabled", data.gates.localDeliveryApiDisabled],
-    ["Release provenance present", data.gates.releaseProvenancePresent],
-    ["Forbidden secrets absent", data.gates.forbiddenSecretsAbsent],
-    ["Three no-activation triggers", data.activationBlockersIntact],
-    ["Audited append-only approval boundary", data.approvalBoundaryIntact],
-  ] as const;
+  const [data, activationData] = await Promise.all([
+    getStagingMachineAuthorizationApprovalPageData(),
+    getStagingMachineAuthorizationActivationPageData(),
+  ]);
+  const approved = data.approval?.decision === "APPROVED_PENDING_ACTIVATION";
+  const activated = activationData.activation?.result === "ACTIVATED";
+  const gateRows = approved
+    ? ([
+        ["Activation UI gate", activationData.gates.activationUiEnabled],
+        ["Approval UI closed", activationData.gates.approvalUiDisabled],
+        ["Production build", activationData.gates.productionBuild],
+        ["STAGING runtime", activationData.gates.stagingRuntime],
+        ["M2M authentication disabled", activationData.gates.m2mAuthDisabled],
+        ["Local Delivery V4 API disabled", activationData.gates.localDeliveryApiDisabled],
+        ["Release provenance present", activationData.gates.releaseProvenancePresent],
+        ["Forbidden secrets absent", activationData.gates.forbiddenSecretsAbsent],
+        ["Three guarded transitions", activationData.transitionGuardsIntact],
+        ["Audited activation boundary", activationData.activationBoundaryIntact],
+      ] as const)
+    : ([
+        ["Approval UI gate", data.gates.approvalUiEnabled],
+        ["Production build", data.gates.productionBuild],
+        ["STAGING runtime", data.gates.stagingRuntime],
+        ["M2M authentication disabled", data.gates.m2mAuthDisabled],
+        ["Local Delivery V4 API disabled", data.gates.localDeliveryApiDisabled],
+        ["Release provenance present", data.gates.releaseProvenancePresent],
+        ["Forbidden secrets absent", data.gates.forbiddenSecretsAbsent],
+        ["Three no-activation triggers", data.activationBlockersIntact],
+        ["Audited append-only approval boundary", data.approvalBoundaryIntact],
+      ] as const);
 
   return (
     <section>
@@ -45,24 +64,48 @@ export default async function StagingM2mApprovalPage() {
       </p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-semibold">Storefront STAGING approval</h1>
+          <h1 className="text-4xl font-semibold">Storefront STAGING authorization</h1>
           <p className="mt-3 max-w-3xl text-slate-400">
-            Review the certified Auth0 client snapshot and record the Owner decision without activating traffic.
+            Review, approve and activate the exact Auth0 registry snapshot through separate audited steps.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <StatusPill good>{data.client?.environment ?? "STAGING"}</StatusPill>
-          <StatusPill good={completed}>
-            {completed ? "APPROVED · STILL PENDING" : "PENDING OWNER APPROVAL"}
+          <StatusPill good={approved}>
+            {activated
+              ? "REGISTRY ACTIVE"
+              : approved
+                ? "APPROVED · PENDING ACTIVATION"
+                : "PENDING OWNER APPROVAL"}
           </StatusPill>
         </div>
       </div>
 
       <div className="mt-8 rounded-2xl border border-sky-400/30 bg-sky-400/5 p-5">
-        <h2 className="text-lg font-semibold text-sky-100">No activation in this step</h2>
+        <h2 className="text-lg font-semibold text-sky-100">
+          {activated
+            ? "Registry active; delivery API still closed"
+            : approved
+              ? "Separate registry activation"
+              : "Approval does not activate access"}
+        </h2>
         <p className="mt-2 text-sm text-slate-300">
-          A successful decision remains <code>APPROVED_PENDING_ACTIVATION</code>. The machine client,
-          credential and both grants remain <code>PENDING_VERIFICATION</code>; the runtime gates remain closed.
+          {activated ? (
+            <>
+              The client, credential and exact grants are <code>ACTIVE</code>. Auth0 runtime verification and
+              Local Delivery V4 remain independent release steps and are not enabled here.
+            </>
+          ) : approved ? (
+            <>
+              The immutable approval is complete. Activation changes only the registered client, credential
+              and two grants in one audited transaction; it does not open Local Delivery routes.
+            </>
+          ) : (
+            <>
+              A successful decision remains <code>APPROVED_PENDING_ACTIVATION</code>. The machine client,
+              credential and both grants remain <code>PENDING_VERIFICATION</code>.
+            </>
+          )}
         </p>
       </div>
 
@@ -71,12 +114,17 @@ export default async function StagingM2mApprovalPage() {
           <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold">Pending authorization snapshot</h2>
+                <h2 className="text-xl font-semibold">Authorization snapshot</h2>
                 <p className="mt-1 font-mono text-xs text-slate-400">
                   {data.client?.key ?? "storefront-staging"}
                 </p>
               </div>
-              <StatusPill good={data.client?.status === "PENDING_VERIFICATION"}>
+              <StatusPill
+                good={
+                  data.client?.status ===
+                  (activated ? "ACTIVE" : "PENDING_VERIFICATION")
+                }
+              >
                 {data.client?.status ?? "NOT FOUND"}
               </StatusPill>
             </div>
@@ -109,7 +157,7 @@ export default async function StagingM2mApprovalPage() {
                   )}
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 sm:col-span-2">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Pending grants</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Scope grants</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {data.client.grants.map((grant) => (
                       <div className="rounded-lg border border-slate-800 px-3 py-2" key={grant.scope}>
@@ -191,6 +239,37 @@ export default async function StagingM2mApprovalPage() {
               </dl>
             </article>
           ) : null}
+
+          {activationData.activation ? (
+            <article className="rounded-2xl border border-emerald-400/30 bg-emerald-400/5 p-5">
+              <h2 className="text-xl font-semibold text-emerald-100">
+                Immutable activation recorded
+              </h2>
+              <p className="mt-3 text-sm text-slate-200">
+                {activationData.activation.reason}
+              </p>
+              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-slate-500">Result</dt>
+                  <dd className="mt-1 font-mono text-xs text-emerald-200">
+                    {activationData.activation.result}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">Activated at</dt>
+                  <dd className="mt-1 text-slate-200">
+                    {new Date(activationData.activation.activatedAt).toLocaleString("en-US")}
+                  </dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-slate-500">Activated by</dt>
+                  <dd className="mt-1 text-slate-200">
+                    {activationData.activation.activatedBy} ({activationData.activation.activatedByEmail})
+                  </dd>
+                </div>
+              </dl>
+            </article>
+          ) : null}
         </div>
 
         <aside className="grid content-start gap-6">
@@ -208,11 +287,13 @@ export default async function StagingM2mApprovalPage() {
             </div>
           </article>
 
-          {data.blockers.length > 0 && !completed ? (
+          {(approved ? activationData.blockers : data.blockers).length > 0 && !activated ? (
             <article className="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-5">
-              <h2 className="text-lg font-semibold text-amber-100">Approval blockers</h2>
+              <h2 className="text-lg font-semibold text-amber-100">
+                {approved ? "Activation blockers" : "Approval blockers"}
+              </h2>
               <ul className="mt-3 grid gap-3 text-sm text-amber-50">
-                {data.blockers.map((blocker) => (
+                {(approved ? activationData.blockers : data.blockers).map((blocker) => (
                   <li className="rounded-xl border border-amber-400/20 bg-slate-950/40 p-3" key={blocker.code}>
                     <p>{blocker.message}</p>
                     <code className="mt-1 block text-[10px] text-amber-300/70">{blocker.code}</code>
@@ -223,18 +304,34 @@ export default async function StagingM2mApprovalPage() {
           ) : null}
 
           <article className="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-5">
-            <h2 className="text-xl font-semibold text-amber-100">Owner decision</h2>
+            <h2 className="text-xl font-semibold text-amber-100">
+              {activated ? "Activation complete" : "Owner decision"}
+            </h2>
             <p className="mt-2 text-sm text-slate-300">
               Signed in as {data.actor.displayName} ({data.actor.email}). Your authenticated account is revalidated inside the transaction.
             </p>
             <div className="mt-5">
-              <StagingM2mApprovalForm
-                canApprove={data.canApprove}
-                certificationAuditEventId={data.certification?.auditEventId ?? null}
-                confirmation={data.confirmation}
-                evidenceDigestSha256={data.certification?.evidenceDigestSha256 ?? null}
-                initialCommandId={randomUUID()}
-              />
+              {activated ? (
+                <p className="text-sm text-emerald-200">
+                  The registry activation is immutable. Close the activation UI gate before enabling Auth0 verification.
+                </p>
+              ) : approved ? (
+                <StagingM2mActivationForm
+                  approvalDigestSha256={activationData.approval?.digestSha256 ?? null}
+                  approvalId={activationData.approval?.id ?? null}
+                  canActivate={activationData.canActivate}
+                  confirmation={activationData.confirmation}
+                  initialCommandId={randomUUID()}
+                />
+              ) : (
+                <StagingM2mApprovalForm
+                  canApprove={data.canApprove}
+                  certificationAuditEventId={data.certification?.auditEventId ?? null}
+                  confirmation={data.confirmation}
+                  evidenceDigestSha256={data.certification?.evidenceDigestSha256 ?? null}
+                  initialCommandId={randomUUID()}
+                />
+              )}
             </div>
           </article>
         </aside>

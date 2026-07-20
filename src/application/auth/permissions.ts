@@ -22,6 +22,7 @@ export const permissionCodes = [
   "fulfillment.rollback",
   "admin.manage",
   "m2m.approve",
+  "m2m.activate",
 ] as const;
 
 export type Permission = (typeof permissionCodes)[number];
@@ -38,6 +39,7 @@ export const permissionsByRole: Record<RoleCode, readonly Permission[]> = {
     "fulfillment.rollback",
     "admin.manage",
     "m2m.approve",
+    "m2m.activate",
   ],
   OPERATIONS_ADMIN: [
     "dashboard.view",
@@ -78,6 +80,7 @@ export const permissionLabels: Record<Permission, string> = {
   "fulfillment.rollback": "Rollback fulfillment",
   "admin.manage": "Manage users",
   "m2m.approve": "Approve STAGING machine access",
+  "m2m.activate": "Activate approved STAGING machine access",
 };
 
 export function hasPermission(roles: RoleCode[], permission: Permission) {
