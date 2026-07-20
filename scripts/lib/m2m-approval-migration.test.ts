@@ -215,6 +215,18 @@ afterAll(async () => {
 });
 
 describe.sequential("M2M STAGING approval migration", () => {
+  it("retains microseconds for the strict approval audit timestamp check", async () => {
+    const result = await db.query<{ datetimePrecision: number }>(`
+      SELECT datetime_precision::INTEGER AS "datetimePrecision"
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'AuditEvent'
+        AND column_name = 'occurredAt'
+    `);
+
+    expect(result.rows).toEqual([{ datetimePrecision: 6 }]);
+  });
+
   it("installs an approval-only RPC and preserves all activation blockers", async () => {
     const result = await executeApproval<{
       procedure: string | null;

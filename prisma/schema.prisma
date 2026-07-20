@@ -578,7 +578,7 @@ model AuditEvent {
   reason                             String?
   before                             Json?
   after                              Json?
-  occurredAt                         DateTime                       @default(now())
+  occurredAt                         DateTime                       @default(now()) @db.Timestamp(6)
   actor                              User?                          @relation(fields: [actorId], references: [id], onDelete: SetNull)
   machineAuthorizationCertifications MachineAuthorizationApproval[] @relation("MachineAuthorizationApprovalCertificationAudit")
   machineAuthorizationApprovals      MachineAuthorizationApproval[] @relation("MachineAuthorizationApprovalApprovalAudit")
